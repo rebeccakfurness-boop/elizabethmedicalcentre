@@ -10,12 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const items: NavItem[] = [
     { href: '/dashboard', label: 'Overview' },
     { href: '/dashboard/clinic', label: 'Clinic today', section: 'Clinic' },
-    { href: '/dashboard/patients', label: 'Patients', section: 'Patients' },
-    { href: '/dashboard/families', label: 'Family accounts', section: 'Patients' },
   ];
-  if (!isClinical(user.clinicalRole) && can(user.role, 'managePatients')) {
-    items.push({ href: '/dashboard/referrals/contacts', label: 'Referral directory', section: 'Patients' });
-  }
   if (isClinical(user.clinicalRole)) {
     items.push(
       { href: '/dashboard/labs', label: 'Blood tests', section: 'Clinic' },
@@ -24,6 +19,19 @@ export default async function DashboardLayout({ children }: { children: React.Re
       { href: '/dashboard/formulary', label: 'Formulary & leaflets', section: 'Clinic' }
     );
   }
+  items.push(
+    { href: '/dashboard/patients', label: 'Patients', section: 'Patients' },
+    { href: '/dashboard/families', label: 'Family accounts', section: 'Patients' }
+  );
+  if (!isClinical(user.clinicalRole) && can(user.role, 'managePatients')) {
+    items.push({ href: '/dashboard/referrals/contacts', label: 'Referral directory', section: 'Patients' });
+  }
+  items.push(
+    { href: '/dashboard/operations', label: 'Overview', section: 'Operations' },
+    { href: '/dashboard/operations/checklists', label: 'Daily checklists', section: 'Operations' },
+    { href: '/dashboard/operations/inventory', label: 'Inventory', section: 'Operations' },
+    { href: '/dashboard/operations/projects', label: 'Project boards', section: 'Operations' }
+  );
   if (can(user.role, 'finance')) {
     items.push(
       { href: '/dashboard/invoices', label: 'Invoices', section: 'Billing' },

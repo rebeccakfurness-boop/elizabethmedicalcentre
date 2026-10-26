@@ -1,6 +1,6 @@
 /** Bump whenever SCHEMA_SQL changes, so already-initialised databases re-run it. Every statement
  * must stay idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING). */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 // Money is stored as BIGINT whole rupiah (IDR has no minor unit in practice).
 export const SCHEMA_SQL = `
@@ -519,4 +519,181 @@ CREATE TABLE IF NOT EXISTS referrals (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS referrals_patient_idx ON referrals (patient_id, created_at DESC);
+
+-- ---------- Operations (schema v4) ----------
+
+-- Recurring checklists: opening/closing, cleaning, fridge temperatures, emergency trolley.
+CREATE TABLE IF NOT EXISTS ops_task_templates (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  area TEXT NOT NULL DEFAULT 'General',
+  frequency TEXT NOT NULL DEFAULT 'daily' CHECK (frequency IN ('daily', 'weekly', 'monthly')),
+  weekday INTEGER CHECK (weekday IS NULL OR weekday BETWEEN 0 AND 6),
+  due_time TEXT,
+  instructions TEXT,
+  assigned_user_id INTEGER REFERENCES users(id),
+  requires_reading BOOLEAN NOT NULL DEFAULT false,
+  reading_unit TEXT,
+  reading_min NUMERIC,
+  reading_max NUMERIC,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- One tick per task per period (the day; the Monday of the week; the 1st of the month).
+CREATE TABLE IF NOT EXISTS ops_task_completions (
+  id SERIAL PRIMARY KEY,
+  template_id INTEGER NOT NULL REFERENCES ops_task_templates(id) ON DELETE CASCADE,
+  period_date DATE NOT NULL,
+  completed_by INTEGER NOT NULL REFERENCES users(id),
+  completed_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  reading NUMERIC,
+  out_of_range BOOLEAN NOT NULL DEFAULT false,
+  note TEXT,
+  UNIQUE (template_id, period_date)
+);
+
+CREATE TABLE IF NOT EXISTS suppliers (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  contact_name TEXT,
+  phone TEXT,
+  email TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS inventory_items (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  sku TEXT,
+  category TEXT NOT NULL DEFAULT 'Consumables',
+  unit TEXT NOT NULL DEFAULT 'each',
+  location TEXT,
+  reorder_level NUMERIC NOT NULL DEFAULT 0,
+  reorder_quantity NUMERIC NOT NULL DEFAULT 0,
+  supplier_id INTEGER REFERENCES suppliers(id),
+  unit_cost BIGINT NOT NULL DEFAULT 0,
+  track_expiry BOOLEAN NOT NULL DEFAULT false,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Stock is held in batches so expiry dates can be tracked; use takes from the soonest expiry first.
+CREATE TABLE IF NOT EXISTS inventory_batches (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  batch_no TEXT,
+  expiry_date DATE,
+  quantity NUMERIC NOT NULL DEFAULT 0 CHECK (quantity >= 0),
+  received_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_batches_item_idx ON inventory_batches (item_id);
+
+CREATE TABLE IF NOT EXISTS purchase_orders (
+  id SERIAL PRIMARY KEY,
+  supplier_id INTEGER REFERENCES suppliers(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'ordered', 'partially_received', 'received', 'cancelled')),
+  ordered_at TIMESTAMPTZ,
+  expected_date DATE,
+  received_at TIMESTAMPTZ,
+  notes TEXT,
+  bill_id INTEGER REFERENCES bills(id),
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS purchase_order_lines (
+  id SERIAL PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id),
+  quantity NUMERIC NOT NULL CHECK (quantity > 0),
+  received_quantity NUMERIC NOT NULL DEFAULT 0,
+  unit_cost BIGINT NOT NULL DEFAULT 0,
+  UNIQUE (order_id, item_id)
+);
+
+-- Every stock change, signed (+ in, - out), for the audit trail and usage reports.
+CREATE TABLE IF NOT EXISTS inventory_movements (
+  id SERIAL PRIMARY KEY,
+  item_id INTEGER NOT NULL REFERENCES inventory_items(id) ON DELETE CASCADE,
+  batch_id INTEGER REFERENCES inventory_batches(id) ON DELETE SET NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('receive', 'use', 'dispose', 'adjust')),
+  quantity NUMERIC NOT NULL,
+  reason TEXT,
+  purchase_order_id INTEGER REFERENCES purchase_orders(id),
+  user_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS inventory_movements_item_idx ON inventory_movements (item_id, created_at DESC);
+
+-- Project boards (Trello-style): lists of cards, each card with assignees, checklist and comments.
+CREATE TABLE IF NOT EXISTS project_boards (
+  id SERIAL PRIMARY KEY,
+  title TEXT NOT NULL,
+  description TEXT,
+  start_date DATE,
+  is_archived BOOLEAN NOT NULL DEFAULT false,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS project_lists (
+  id SERIAL PRIMARY KEY,
+  board_id INTEGER NOT NULL REFERENCES project_boards(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  is_done BOOLEAN NOT NULL DEFAULT false
+);
+
+CREATE TABLE IF NOT EXISTS project_cards (
+  id SERIAL PRIMARY KEY,
+  board_id INTEGER NOT NULL REFERENCES project_boards(id) ON DELETE CASCADE,
+  list_id INTEGER NOT NULL REFERENCES project_lists(id),
+  title TEXT NOT NULL,
+  description TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  start_date DATE,
+  due_date DATE,
+  priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high', 'urgent')),
+  labels TEXT[] NOT NULL DEFAULT '{}',
+  completed_at TIMESTAMPTZ,
+  is_archived BOOLEAN NOT NULL DEFAULT false,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS project_cards_list_idx ON project_cards (list_id, position);
+
+CREATE TABLE IF NOT EXISTS project_card_assignees (
+  card_id INTEGER NOT NULL REFERENCES project_cards(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id),
+  PRIMARY KEY (card_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS project_checklist_items (
+  id SERIAL PRIMARY KEY,
+  card_id INTEGER NOT NULL REFERENCES project_cards(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  is_done BOOLEAN NOT NULL DEFAULT false,
+  done_by INTEGER REFERENCES users(id),
+  done_at TIMESTAMPTZ,
+  assignee_id INTEGER REFERENCES users(id),
+  due_date DATE,
+  position INTEGER NOT NULL DEFAULT 0
+);
+
+-- Comments and an automatic history (moved, assigned, ticked) on each card.
+CREATE TABLE IF NOT EXISTS project_card_activity (
+  id SERIAL PRIMARY KEY,
+  card_id INTEGER NOT NULL REFERENCES project_cards(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id),
+  kind TEXT NOT NULL CHECK (kind IN ('comment', 'event')),
+  body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 `;

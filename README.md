@@ -17,8 +17,8 @@ Next.js 16 (App Router), React 19, TypeScript and Tailwind CSS, with Postgres vi
 | Role | Can do |
 | --- | --- |
 | Patient | Sees only their own family: patient cards, invoices (PDF), insurance claims and payments. Can update contact details and pay invoices by uploading a transfer receipt. |
-| Staff | Finds and views patient cards, checks patients in to the clinic, records allergies and blood type, and writes admin notes. |
-| Admin | Everything staff can do, plus: creates patients and family accounts, links family members, creates and resets patient portal logins, and manages staff accounts. |
+| Staff | Finds and views patient cards, checks patients in to the clinic, records allergies and blood type, writes admin notes, and uses the operations checklists, inventory and project boards. |
+| Admin | Everything staff can do, plus: sets up checklists, inventory items, suppliers, stock orders and project boards; creates patients and family accounts, links family members, creates and resets patient portal logins, and manages staff accounts. |
 | Super admin | Everything, plus: invoicing, payments, insurance claims, clinic settings and admin accounts. Also opens the PIN-locked finance area (budget tracker, bills to pay, bank statements, transactions). |
 
 **Clinical access** is a separate setting on each staff account (doctor, nurse, midwife, pharmacist), which only a super admin can grant on **Staff accounts**. It is what unlocks clinical notes, triage, medications and the protocols; only doctors can prescribe and approve clinical content. An admin or super admin without a clinical role sees no clinical-only notes.
@@ -47,6 +47,15 @@ Built for a walk-in clinic in Kuta, Lombok (`/dashboard/clinic`, `/dashboard/enc
 - **Referrals.** Six templates: emergency transfer, hospital admission, specialist opinion, allied health, imaging and rabies post-exposure treatment. The letter is pre-filled from the visit (reason, history, examination and latest observations, recent results, medicines, allergies, management). Pick the recipient from the **Referral directory** (hospitals, specialists, allied health), confirm patient consent, sign, then email the PDF letter with the chosen clinical notes and results attached, or print it. The email body only shows the patient's initials, and replies go to the referring clinician. Record the outcome and upload the reply letter when it comes back. A signed letter can be shared to the patient portal.
 - **Billing link.** After a visit, **Create invoice for this visit** fills in the consultation fee (Clinic settings) and each medicine, and links the invoice to the visit.
 - **Clinical content approval.** Protocols, triage rules, drug sheets and leaflets are written as drafts based on WHO and common international guidance. Each one shows a "not yet approved" warning until a doctor reviews and approves it (Protocols / Formulary pages). Editing content in `src/clinical/*.ts` means bumping its `version`, which asks for approval again.
+
+## Operations
+
+For everyone on the team (Dashboard → Operations). Admins and super admins set things up; all staff use them.
+
+- **Daily checklists.** Recurring tasks every day, week or month: opening and closing, cleaning, vaccine fridge and room temperatures, oxygen, sharps bins, emergency trolley, stock count. A task can ask for a reading with a safe range. An out-of-range reading needs a note saying what was done, and is flagged on the overview and in the 14-day history. Each tick records who and when, and staff can catch up on yesterday. **Add the suggested clinic checklist** sets up a starting list.
+- **Inventory.** Items with category, location, reorder level, usual order quantity, supplier and cost. Stock is kept in batches with expiry dates, and "Used" always takes from the batch that expires first. Staff record use, deliveries, stock counts (set the total) and disposals; every change is in the item's history. Low and out-of-stock items and batches expiring within 60 days are flagged.
+- **Reordering.** "Needs reordering" lists items at or below their reorder level (counting what's already on order). Tick them to make one draft order per supplier, edit it, print it for the supplier and mark it ordered. Book deliveries in with batch and expiry (part deliveries are fine); a super admin can add the cost straight to **Bills to pay**.
+- **Project boards.** Trello-style boards with lists and cards you drag between them (or move with the list menu on a card, on phones). Cards have several people, start and due dates, priority, labels, a checklist where each step can have its own owner and deadline, comments, and an automatic history of who moved, assigned or ticked what. Filter by person or label, switch to a by-deadline list, and see **My tasks** and the next two weeks' deadlines on the Operations overview. **Clinic launch plan** creates a board of about 40 cards over six months: licensing, fit-out, equipment, clinical set-up, staffing, IT, marketing and opening. Its regulatory steps are a starting point: confirm them with the Dinas Kesehatan and your legal adviser.
 
 ## Invoicing, insurance and payments
 

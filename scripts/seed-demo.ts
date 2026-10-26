@@ -3,6 +3,7 @@
 // Never run this against the live clinic database.
 import bcrypt from 'bcryptjs';
 import { initSchema, pool } from './db';
+import { SUGGESTED_CHECKLISTS } from '../src/operations/templates';
 
 const DEMO_PASSWORD = 'demo-password-1';
 
@@ -94,6 +95,31 @@ async function main() {
     await q(`INSERT INTO encounters (patient_id, encounter_type, presenting_complaint, created_by)
       SELECT p.id, 'walk_in', 'Jellyfish sting on left leg while surfing, burning pain', u.id
       FROM patients p, users u WHERE p.first_name = 'Robin' AND u.email = 'admin@demo.test'`);
+
+    // Operations: checklists, suppliers and a few stock items (one low, one expiring soon).
+    for (const [i, t] of SUGGESTED_CHECKLISTS.entries()) {
+      await q(`INSERT INTO ops_task_templates (title, area, frequency, weekday, due_time, instructions, requires_reading, reading_unit, reading_min, reading_max, sort_order)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+        [t.title, t.area, t.frequency, t.weekday ?? null, t.dueTime ?? null, t.instructions ?? null, !!t.reading, t.reading?.unit ?? null, t.reading?.min ?? null, t.reading?.max ?? null, i]);
+    }
+    const [sup1] = await q(`INSERT INTO suppliers (name, contact_name, phone) VALUES ('Demo Medical Supplies', 'Pak Demo', '+62 811 0000 0099') RETURNING id`);
+    const [sup2] = await q(`INSERT INTO suppliers (name, email) VALUES ('Demo Pharma Distributor', 'orders@pharma.example.test') RETURNING id`);
+    for (const [name, category, unit, reorder, orderQty, supplier, cost, expiry, qty, days] of [
+      ['Sterile gauze swabs 10x10 cm', 'Wound care', 'pack', 10, 50, sup1.id, 15000, false, 40, null],
+      ['Nitrile gloves (M)', 'PPE & cleaning', 'box', 5, 20, sup1.id, 85000, false, 3, null],
+      ['IV cannula 20G', 'IV & injections', 'each', 20, 100, sup1.id, 9000, true, 60, 400],
+      ['Paracetamol 500 mg tablets', 'Medicines', 'tablet', 200, 1000, sup2.id, 150, true, 800, 25],
+      ['Oral rehydration salts sachets', 'Medicines', 'sachet', 50, 200, sup2.id, 2500, true, 120, 300],
+      ['Dengue NS1 rapid tests', 'Point-of-care tests', 'test', 10, 25, sup2.id, 65000, true, 0, null],
+    ] as [string, string, string, number, number, number, number, boolean, number, number | null][]) {
+      const [item] = await q(`INSERT INTO inventory_items (name, category, unit, reorder_level, reorder_quantity, supplier_id, unit_cost, track_expiry) VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id`,
+        [name, category, unit, reorder, orderQty, supplier, cost, expiry]);
+      if (qty > 0) {
+        const [b] = await q(`INSERT INTO inventory_batches (item_id, batch_no, expiry_date, quantity) VALUES ($1, $2, CASE WHEN $3::int IS NULL THEN NULL ELSE CURRENT_DATE + $3::int END, $4) RETURNING id`,
+          [item.id, expiry ? 'DEMO-1' : null, days, qty]);
+        await q(`INSERT INTO inventory_movements (item_id, batch_id, kind, quantity, reason) VALUES ($1, $2, 'receive', $3, 'Opening stock')`, [item.id, b.id, qty]);
+      }
+    }
 
     console.log(`Demo data created.
   Staff login (/staff/login): superadmin@demo.test (doctor), doctor@demo.test, nurse@demo.test, admin@demo.test (reception, non-clinical)

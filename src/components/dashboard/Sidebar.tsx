@@ -15,17 +15,17 @@ export interface NavItem {
 export function Sidebar({ items, userName, roleLabel, logoutAction }: { items: NavItem[]; userName: string; roleLabel: string; logoutAction: () => Promise<void> }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
-  const isActive = (href: string) => (href === '/dashboard' || href === '/dashboard/budget' ? pathname === href : pathname.startsWith(href));
+  const isActive = (href: string) => (['/dashboard', '/dashboard/budget', '/dashboard/operations'].includes(href) ? pathname === href : pathname.startsWith(href));
 
   return (
     <>
-      <div className="flex items-center justify-between bg-teal px-4 py-3 text-cream lg:hidden">
+      <div className="flex items-center justify-between bg-teal px-4 py-3 text-cream print:hidden lg:hidden">
         <Logo variant="wordmark" className="h-6" title="The Doctors" />
         <button className="font-label text-xs font-bold uppercase tracking-widest" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
           {open ? 'Close' : 'Menu'}
         </button>
       </div>
-      <aside className={`${open ? 'block' : 'hidden'} w-full shrink-0 bg-teal text-cream lg:sticky lg:top-0 lg:block lg:h-screen lg:w-64 lg:overflow-y-auto`}>
+      <aside className={`${open ? 'block' : 'hidden'} w-full shrink-0 bg-teal text-cream print:hidden lg:sticky lg:top-0 lg:block lg:h-screen lg:w-64 lg:overflow-y-auto`}>
         <div className="hidden px-6 pb-4 pt-7 lg:block">
           <Link href="/dashboard" className="block w-40">
             <Logo variant="logo-combination" title="The Doctors – Elizabeth Medical Centre" />

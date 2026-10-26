@@ -52,6 +52,8 @@ export const PERMISSIONS = {
   manageStaffAccounts: ['admin', 'super_admin'],
   manageAdminAccounts: ['super_admin'],
   finance: ['super_admin'],
+  /** Set up checklists, inventory items, suppliers and project boards. Everyone can use them. */
+  manageOperations: ['admin', 'super_admin'],
 } as const satisfies Record<string, readonly Role[]>;
 
 export type Permission = keyof typeof PERMISSIONS;
