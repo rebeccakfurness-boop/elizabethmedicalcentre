@@ -108,7 +108,28 @@ h1, h2, h3, p, figure { margin: 0; }
   margin-bottom: clamp(40px, 7vh, 80px);
 }
 
-.hero .eyebrow { color: var(--clinical-off-white); margin-bottom: 0.9rem; }
+.soon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75em;
+  margin-bottom: 1.25rem;
+  padding: 0.55em 1.2em;
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--pulse-red);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: clamp(0.95rem, 1.35vw, 1.2rem);
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.soon-badge__place {
+  padding-left: 0.75em;
+  border-left: 1.5px solid currentColor;
+  font-weight: 600;
+  color: var(--vitality-clay);
+}
 
 .hero__title {
   font-family: var(--font-headline);
@@ -421,6 +442,11 @@ h1, h2, h3, p, figure { margin: 0; }
   }
   .hero__content { padding-block: 40px 16px; }
   .hero__logo { width: min(100%, 22rem); margin-bottom: 40px; }
+  .soon-badge {
+    font-size: clamp(0.8rem, 3.6vw, 1rem);
+    letter-spacing: 0.08em;
+    white-space: nowrap;
+  }
 
   .about__grid {
     grid-template-columns: 1fr;
