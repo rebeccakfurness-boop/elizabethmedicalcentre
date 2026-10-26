@@ -7,7 +7,7 @@
      Montserrat (labels)         -> Montserrat
      Marlide Display (editorial) -> Instrument Serif */
 
-:root {
+.site {
   /* Brand palette */
   --vitality-clay: #a35038;
   --clinical-off-white: #e3ceb1;
@@ -19,21 +19,20 @@
   --ink: #231f1f;
   --paper: #fdf9f4;
 
-  --font-headline: "Nunito", "Arial Rounded MT Bold", "Arial Rounded MT", system-ui, sans-serif;
-  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
-  --font-label: "Montserrat", "Helvetica Neue", Arial, sans-serif;
-  --font-serif: "Instrument Serif", "Times New Roman", serif;
+  --font-headline: var(--nf-headline), "Arial Rounded MT Bold", system-ui, sans-serif;
+  --font-body: var(--nf-body), "Helvetica Neue", Arial, sans-serif;
+  --font-label: var(--nf-label), "Helvetica Neue", Arial, sans-serif;
+  --font-serif: var(--nf-serif), "Times New Roman", serif;
 
   --gutter: clamp(16px, 4.5vw, 88px);
 }
 
-*,
-*::before,
-*::after { box-sizing: border-box; }
+.site *,
+.site *::before,
+.site *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
-
-body {
+.site {
+  position: relative;
   margin: 0;
   background: var(--paper);
   color: var(--ink);
@@ -44,11 +43,15 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-img { display: block; max-width: 100%; height: auto; }
+.site img { display: block; max-width: 100%; height: auto; }
 
-h1, h2, h3, p, figure { margin: 0; }
+.site h1,
+.site h2,
+.site h3,
+.site p,
+.site figure { margin: 0; }
 
-.visually-hidden {
+.site .visually-hidden {
   position: absolute !important;
   width: 1px; height: 1px;
   overflow: hidden;
@@ -57,7 +60,7 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* Corner labels, as on every page of the brand presentation */
-.corner-labels {
+.site .corner-labels {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -68,9 +71,9 @@ h1, h2, h3, p, figure { margin: 0; }
   text-transform: uppercase;
   color: var(--cream);
 }
-.corner-labels--clay { color: var(--vitality-clay); }
+.site .corner-labels--clay { color: var(--vitality-clay); }
 
-.eyebrow {
+.site .eyebrow {
   font-family: var(--font-label);
   font-weight: 600;
   font-size: 0.8rem;
@@ -79,7 +82,7 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* ---------- Hero ---------- */
-.hero {
+.site .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.1fr) minmax(0, 0.9fr);
   min-height: 100vh;
@@ -88,19 +91,19 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--cream);
 }
 
-.hero__panel {
+.site .hero__panel {
   display: flex;
   flex-direction: column;
   padding: clamp(24px, 3.5vw, 56px) var(--gutter);
 }
 
-.hero__content {
+.site .hero__content {
   margin-block: auto;
   padding-block: clamp(40px, 7vh, 96px);
   max-width: 40rem;
 }
 
-.hero__logo {
+.site .hero__logo {
   display: block;
   width: min(100%, 30rem);
   aspect-ratio: 1.8659;
@@ -108,7 +111,7 @@ h1, h2, h3, p, figure { margin: 0; }
   margin-bottom: clamp(40px, 7vh, 80px);
 }
 
-.soon-badge {
+.site .soon-badge {
   display: inline-flex;
   align-items: center;
   gap: 0.75em;
@@ -124,14 +127,14 @@ h1, h2, h3, p, figure { margin: 0; }
   text-transform: uppercase;
 }
 
-.soon-badge__place {
+.site .soon-badge__place {
   padding-left: 0.75em;
   border-left: 1.5px solid currentColor;
   font-weight: 600;
   color: var(--vitality-clay);
 }
 
-.hero__title {
+.site .hero__title {
   font-family: var(--font-headline);
   font-weight: 800;
   font-stretch: normal;
@@ -140,7 +143,7 @@ h1, h2, h3, p, figure { margin: 0; }
   letter-spacing: -0.015em;
 }
 
-.hero__lede {
+.site .hero__lede {
   margin-top: 1.1rem;
   max-width: 34rem;
   font-size: clamp(1rem, 1.2vw, 1.1rem);
@@ -148,7 +151,7 @@ h1, h2, h3, p, figure { margin: 0; }
   opacity: 0.92;
 }
 
-.notify {
+.site .notify {
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
@@ -156,7 +159,7 @@ h1, h2, h3, p, figure { margin: 0; }
   max-width: 34rem;
 }
 
-.notify input[type="email"] {
+.site .notify input[type="email"] {
   flex: 1 1 16rem;
   min-width: 0;
   padding: 0.95rem 1.2rem;
@@ -167,14 +170,14 @@ h1, h2, h3, p, figure { margin: 0; }
   font: inherit;
   font-stretch: 112%;
 }
-.notify input::placeholder { color: rgba(248, 234, 219, 0.7); }
-.notify input:focus-visible {
+.site .notify input::placeholder { color: rgba(248, 234, 219, 0.7); }
+.site .notify input:focus-visible {
   outline: none;
   border-color: var(--cream);
   background: rgba(248, 234, 219, 0.14);
 }
 
-.notify button {
+.site .notify button {
   flex: 0 0 auto;
   padding: 0.95rem 1.7rem;
   border: 0;
@@ -189,23 +192,23 @@ h1, h2, h3, p, figure { margin: 0; }
   cursor: pointer;
   transition: background-color 0.2s ease;
 }
-.notify button:hover { background: var(--pulse-red); }
-.notify button:focus-visible { outline: 2px solid var(--cream); outline-offset: 3px; }
-.notify button:disabled { opacity: 0.7; cursor: progress; }
+.site .notify button:hover { background: var(--pulse-red); }
+.site .notify button:focus-visible { outline: 2px solid var(--cream); outline-offset: 3px; }
+.site .notify button:disabled { opacity: 0.7; cursor: progress; }
 
-.notify__status {
+.site .notify__status {
   flex-basis: 100%;
   min-height: 1.5em;
   font-size: 0.92rem;
   color: var(--clinical-off-white);
 }
 
-.hero__media {
+.site .hero__media {
   position: relative;
   min-height: 100%;
   overflow: hidden;
 }
-.hero__media img {
+.site .hero__media img {
   position: absolute;
   inset: 0;
   width: 100%;
@@ -214,7 +217,7 @@ h1, h2, h3, p, figure { margin: 0; }
   object-position: 30% 50%;
 }
 
-.chip {
+.site .chip {
   position: absolute;
   left: clamp(16px, 2.5vw, 32px);
   bottom: clamp(16px, 2.5vw, 32px);
@@ -231,7 +234,7 @@ h1, h2, h3, p, figure { margin: 0; }
   font-size: 0.95rem;
   line-height: 1.2;
 }
-.chip svg {
+.site .chip svg {
   flex: 0 0 auto;
   width: 1.4rem;
   height: 1.4rem;
@@ -239,12 +242,12 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* ---------- About ---------- */
-.about {
+.site .about {
   background: var(--paper);
   padding: clamp(24px, 3.5vw, 56px) var(--gutter) clamp(64px, 9vw, 128px);
 }
 
-.about__grid {
+.site .about__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   grid-template-areas:
@@ -256,7 +259,7 @@ h1, h2, h3, p, figure { margin: 0; }
   align-items: start;
 }
 
-.about__title {
+.site .about__title {
   grid-area: title;
   font-family: var(--font-label);
   font-weight: 600;
@@ -267,14 +270,14 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--pulse-red);
 }
 
-.about__img {
+.site .about__img {
   grid-area: img;
   width: 100%;
   aspect-ratio: 1336 / 942;
   object-fit: cover;
 }
 
-.about__copy {
+.site .about__copy {
   grid-area: copy;
   font-family: var(--font-serif);
   font-stretch: normal;
@@ -285,7 +288,7 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* ---------- Care band ---------- */
-.care {
+.site .care {
   position: relative;
   overflow: hidden;
   background: var(--clinical-off-white);
@@ -294,7 +297,7 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* Oversized, cropped brandmark – as used on the medical van livery */
-.care__mark {
+.site .care__mark {
   position: absolute;
   left: clamp(-260px, -14vw, -90px);
   top: 50%;
@@ -304,12 +307,12 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--medical-teal);
 }
 
-.care__inner {
+.site .care__inner {
   position: relative;
   margin-left: clamp(150px, 24vw, 400px);
 }
 
-.care__title {
+.site .care__title {
   font-family: var(--font-headline);
   font-weight: 800;
   font-stretch: normal;
@@ -319,7 +322,7 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--pulse-red);
 }
 
-.pillars {
+.site .pillars {
   list-style: none;
   margin: clamp(40px, 5vw, 64px) 0 0;
   padding: 0;
@@ -328,12 +331,12 @@ h1, h2, h3, p, figure { margin: 0; }
   gap: clamp(20px, 3vw, 40px);
 }
 
-.pillars li {
+.site .pillars li {
   border-top: 1.5px solid var(--pulse-red);
   padding-top: 1.1rem;
 }
 
-.pillar__num {
+.site .pillar__num {
   display: block;
   font-family: var(--font-headline);
   font-weight: 800;
@@ -342,7 +345,7 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--vitality-clay);
 }
 
-.pillars h3 {
+.site .pillars h3 {
   margin-top: 0.8rem;
   font-family: var(--font-label);
   font-weight: 700;
@@ -352,13 +355,13 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--medical-teal);
 }
 
-.pillars p {
+.site .pillars p {
   margin-top: 0.4rem;
   color: var(--ink);
 }
 
 /* ---------- Footer ---------- */
-.footer {
+.site .footer {
   position: relative;
   overflow: hidden;
   background: var(--pulse-red);
@@ -367,21 +370,21 @@ h1, h2, h3, p, figure { margin: 0; }
 }
 
 /* Topographic line work from the brand stationery */
-.footer::before {
+.site .footer::before {
   content: "";
   position: absolute;
   inset: 0;
   background: var(--vitality-clay);
-  -webkit-mask: url("../img/contours.svg") center / cover no-repeat;
-  mask: url("../img/contours.svg") center / cover no-repeat;
+  -webkit-mask: url("/assets/img/contours.svg") center / cover no-repeat;
+  mask: url("/assets/img/contours.svg") center / cover no-repeat;
   opacity: 0.55;
   pointer-events: none;
 }
 
-.footer__inner,
-.footer__base { position: relative; }
+.site .footer__inner,
+.site .footer__base { position: relative; }
 
-.footer__inner {
+.site .footer__inner {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -389,20 +392,20 @@ h1, h2, h3, p, figure { margin: 0; }
   gap: 40px;
 }
 
-.footer__logo {
+.site .footer__logo {
   display: block;
   width: min(100%, 22rem);
   aspect-ratio: 2.4439;
   color: var(--cream);
 }
 
-.footer__address {
+.site .footer__address {
   font-style: normal;
   font-size: 0.95rem;
   line-height: 1.6;
 }
 
-.footer__label {
+.site .footer__label {
   display: block;
   margin-bottom: 0.5rem;
   font-family: var(--font-label);
@@ -413,7 +416,7 @@ h1, h2, h3, p, figure { margin: 0; }
   color: var(--clinical-off-white);
 }
 
-.footer__base {
+.site .footer__base {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
@@ -431,33 +434,70 @@ h1, h2, h3, p, figure { margin: 0; }
 
 /* ---------- Responsive ---------- */
 @media (max-width: 900px) {
-  .hero {
+  .site .hero {
     grid-template-columns: 1fr;
     min-height: 0;
   }
-  .hero__media {
+  .site .hero__media {
     order: -1;
     height: 52vh;
     min-height: 320px;
   }
-  .hero__content { padding-block: 40px 16px; }
-  .hero__logo { width: min(100%, 22rem); margin-bottom: 40px; }
-  .soon-badge {
+  .site .hero__content { padding-block: 40px 16px; }
+  .site .hero__logo { width: min(100%, 22rem); margin-bottom: 40px; }
+  .site .soon-badge {
     font-size: clamp(0.8rem, 3.6vw, 1rem);
     letter-spacing: 0.08em;
     white-space: nowrap;
   }
 
-  .about__grid {
+  .site .about__grid {
     grid-template-columns: 1fr;
     grid-template-areas: "title" "img" "copy";
   }
 
-  .care__mark { opacity: 0.18; left: -120px; }
-  .care__inner { margin-left: 0; }
-  .pillars { grid-template-columns: 1fr; }
+  .site .care__mark { opacity: 0.18; left: -120px; }
+  .site .care__inner { margin-left: 0; }
+  .site .pillars { grid-template-columns: 1fr; }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * { transition: none !important; }
+  .site * { transition: none !important; }
 }
+
+/* ---------- Logins ---------- */
+/* Patient login: deliberately prominent, pinned top-right over the photo on every screen size. */
+.site .patient-login {
+  position: absolute;
+  top: clamp(16px, 2.6vw, 40px);
+  right: clamp(16px, 2.6vw, 40px);
+  z-index: 10;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  padding: 0.85rem 1.5rem 0.85rem 1.2rem;
+  border-radius: 999px;
+  background: var(--vitality-clay);
+  color: var(--cream);
+  font-family: var(--font-label);
+  font-weight: 700;
+  font-size: clamp(0.85rem, 1.05vw, 1rem);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  box-shadow: 0 10px 30px -10px rgba(35, 31, 31, 0.5);
+  transition: background-color 0.2s ease, transform 0.2s ease;
+}
+.site .patient-login:hover { background: var(--pulse-red); transform: translateY(-1px); }
+.site .patient-login:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+.site .patient-login svg { width: 1.25em; height: 1.25em; }
+
+/* Staff login: intentionally quiet, in the footer's base row. */
+.site .footer__links { display: inline-flex; gap: 24px; align-items: center; }
+.site .footer__staff {
+  color: inherit;
+  opacity: 0.45;
+  text-decoration: none;
+}
+.site .footer__staff:hover,
+.site .footer__staff:focus-visible { opacity: 1; text-decoration: underline; }

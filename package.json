@@ -1,0 +1,42 @@
+{
+  "name": "elizabethmedicalcentre",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "db:init": "tsx --env-file-if-exists=.env.local scripts/init-db.ts",
+    "db:create-user": "tsx --env-file-if-exists=.env.local scripts/create-user.ts",
+    "db:seed-demo": "tsx --env-file-if-exists=.env.local scripts/seed-demo.ts",
+    "test": "tsx --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "0.122.0",
+    "@react-pdf/renderer": "4.5.1",
+    "@vercel/blob": "2.6.1",
+    "bcryptjs": "3.0.3",
+    "iron-session": "8.0.4",
+    "next": "16.2.10",
+    "pg": "^8.13.1",
+    "react": "19.2.9",
+    "react-dom": "19.2.9",
+    "xlsx": "0.18.5",
+    "zod": "3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "@types/pg": "^8.11.10",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "autoprefixer": "^10.4.19",
+    "eslint": "^9.17.0",
+    "eslint-config-next": "16.2.10",
+    "postcss": "^8.4.39",
+    "tailwindcss": "3.4.19",
+    "tsx": "^4.16.2",
+    "typescript": "5.9.3"
+  }
+}
