@@ -1,12 +1,14 @@
 import 'server-only';
 import { getClinicSettings, getInvoice } from '@/lib/billing';
 import { formatDate, formatIDR } from '@/lib/format';
-import { renderInvoicePdf } from '@/lib/pdf/render';
+import { renderInvoicePdf, renderReferralPdf } from '@/lib/pdf/render';
+import { getReferral } from '@/lib/referrals';
+import { URGENCY_LABELS } from '@/clinical/referrals';
 
 // Transactional email via Brevo's REST API (same provider as the Selong Bay system).
 // Needs BREVO_API_KEY and EMAIL_FROM (a sender address verified in Brevo).
 
-async function send(input: { to: string; subject: string; html: string; attachment?: { name: string; content: string } }) {
+async function send(input: { to: string; subject: string; html: string; attachment?: { name: string; content: string }; replyTo?: { email: string; name: string } }) {
   const apiKey = process.env.BREVO_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) throw new Error('Email isn’t set up yet (BREVO_API_KEY and EMAIL_FROM). Download the PDF and send it yourself for now.');
@@ -20,6 +22,7 @@ async function send(input: { to: string; subject: string; html: string; attachme
       subject: input.subject,
       htmlContent: input.html,
       attachment: input.attachment ? [input.attachment] : undefined,
+      replyTo: input.replyTo,
     }),
   });
   if (!res.ok) {
@@ -27,6 +30,8 @@ async function send(input: { to: string; subject: string; html: string; attachme
     throw new Error(`The email couldn’t be sent (${res.status}). ${body.slice(0, 200)}`);
   }
 }
+
+export const isEmail = (s: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(s);
 
 const escape = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]!);
 
@@ -48,5 +53,39 @@ export async function sendInvoiceEmail(invoiceId: number, to: string): Promise<v
       ${portalUrl ? `<p>You can also view and pay your invoices in the <a href="${portalUrl}">patient portal</a>.</p>` : ''}
       <p>Warm regards,<br>The Doctors – Elizabeth Medical Centre</p>`,
     attachment: { name: pdf.fileName, content: pdf.buffer.toString('base64') },
+  });
+}
+
+/**
+ * Sends a signed referral letter as a PDF. The email body names nobody: patient details are only in
+ * the attachment. Replies go straight to the referring clinician.
+ */
+export async function sendReferralEmail(referralId: number, to: string, opts: { toPatient?: boolean } = {}): Promise<void> {
+  if (!isEmail(to)) throw new Error('That email address doesn’t look right.');
+  const r = await getReferral(referralId);
+  if (!r) throw new Error('Referral not found.');
+  if (r.status === 'draft' || r.status === 'cancelled') throw new Error('Sign the referral before sending it.');
+  const pdf = await renderReferralPdf(referralId);
+  const initials = `${r.first_name[0] ?? ''}${r.last_name[0] ?? ''}`.toUpperCase();
+  const urgency = URGENCY_LABELS[r.urgency].label;
+  await send({
+    to,
+    subject: opts.toPatient
+      ? 'Your referral letter from The Doctors – Elizabeth Medical Centre'
+      : `${urgency} referral REF-${r.id} (patient ${initials}) from The Doctors – Elizabeth Medical Centre`,
+    html: opts.toPatient
+      ? `<p>Dear ${escape(r.first_name)},</p>
+        <p>Attached is a copy of the referral letter ${escape(r.author_name)} wrote for you to ${escape(r.recipient_organisation ?? r.recipient_name)}.
+        Please take it (on your phone or printed) to your appointment.</p>
+        <p>If you feel worse before then, contact the clinic or call 119 in an emergency.</p>
+        <p>Warm regards,<br>The Doctors – Elizabeth Medical Centre</p>`
+      : `<p>Dear ${escape(r.recipient_name)},</p>
+        <p>Please find attached a <strong>${urgency.toLowerCase()}</strong> referral (reference REF-${r.id}) from ${escape(r.author_name)}
+        at The Doctors – Elizabeth Medical Centre, Kuta, Lombok, for a patient with initials ${escape(initials)}.</p>
+        <p>The attachment contains confidential health information. Replying to this email reaches ${escape(r.author_name)} directly.</p>
+        <p>If you have received this in error, please delete it and let us know.</p>
+        <p>With thanks,<br>${escape(r.author_name)}<br>The Doctors – Elizabeth Medical Centre</p>`,
+    attachment: { name: pdf.fileName, content: pdf.buffer.toString('base64') },
+    replyTo: { email: r.author_email, name: r.author_name },
   });
 }

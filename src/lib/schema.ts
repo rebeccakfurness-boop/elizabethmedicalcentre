@@ -1,6 +1,6 @@
 /** Bump whenever SCHEMA_SQL changes, so already-initialised databases re-run it. Every statement
  * must stay idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING). */
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 // Money is stored as BIGINT whole rupiah (IDR has no minor unit in practice).
 export const SCHEMA_SQL = `
@@ -407,4 +407,116 @@ CREATE TABLE IF NOT EXISTS content_approvals (
   comments TEXT,
   UNIQUE (kind, slug, version)
 );
+
+-- ---------- Blood tests and referrals (schema v3) ----------
+
+-- Clinical files (lab reports, referral replies) are only served to clinical staff, never to
+-- finance staff, and to a patient only once a doctor has shared them.
+ALTER TABLE files ADD COLUMN IF NOT EXISTS clinical BOOLEAN NOT NULL DEFAULT false;
+
+-- One request to a lab, for one or more tests from the catalogue in src/clinical/labs.ts.
+CREATE TABLE IF NOT EXISTS lab_orders (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  encounter_id INTEGER REFERENCES encounters(id),
+  ordered_by INTEGER NOT NULL REFERENCES users(id),
+  test_codes TEXT[] NOT NULL DEFAULT '{}',
+  other_tests TEXT,
+  lab_name TEXT,
+  urgency TEXT NOT NULL DEFAULT 'routine' CHECK (urgency IN ('routine', 'urgent')),
+  fasting BOOLEAN NOT NULL DEFAULT false,
+  clinical_details TEXT,
+  status TEXT NOT NULL DEFAULT 'ordered' CHECK (status IN ('ordered', 'collected', 'resulted', 'reviewed', 'cancelled')),
+  collected_at TIMESTAMPTZ,
+  resulted_at TIMESTAMPTZ,
+  reviewed_at TIMESTAMPTZ,
+  reviewed_by INTEGER REFERENCES users(id),
+  review_comment TEXT,
+  patient_comment TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS lab_orders_patient_idx ON lab_orders (patient_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS lab_orders_status_idx ON lab_orders (status);
+
+-- One value per analyte. Hidden from the patient unless a doctor ticks "share".
+CREATE TABLE IF NOT EXISTS lab_results (
+  id SERIAL PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES lab_orders(id) ON DELETE CASCADE,
+  test_code TEXT,
+  analyte_code TEXT,
+  name TEXT NOT NULL,
+  value TEXT NOT NULL,
+  numeric_value NUMERIC,
+  unit TEXT,
+  ref_range TEXT,
+  flag TEXT CHECK (flag IS NULL OR flag IN ('L', 'H', 'LL', 'HH', 'A')),
+  shared_with_patient BOOLEAN NOT NULL DEFAULT false,
+  entered_by INTEGER NOT NULL REFERENCES users(id),
+  entered_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (order_id, analyte_code)
+);
+
+-- Scanned or emailed lab reports. "extracted" holds values read from the report, which a
+-- clinician must check before they become results.
+CREATE TABLE IF NOT EXISTS lab_attachments (
+  id SERIAL PRIMARY KEY,
+  order_id INTEGER NOT NULL REFERENCES lab_orders(id) ON DELETE CASCADE,
+  file_id INTEGER NOT NULL REFERENCES files(id),
+  shared_with_patient BOOLEAN NOT NULL DEFAULT false,
+  extracted JSONB,
+  uploaded_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Address book of hospitals, specialists and allied health professionals.
+CREATE TABLE IF NOT EXISTS referral_contacts (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL,
+  organisation TEXT,
+  kind TEXT NOT NULL CHECK (kind IN ('hospital', 'specialist', 'allied_health', 'imaging', 'other')),
+  specialty TEXT,
+  email TEXT,
+  phone TEXT,
+  address TEXT,
+  notes TEXT,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- A referral letter: draft -> finalised (signed, read-only) -> sent -> completed.
+CREATE TABLE IF NOT EXISTS referrals (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  encounter_id INTEGER REFERENCES encounters(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  contact_id INTEGER REFERENCES referral_contacts(id),
+  template TEXT NOT NULL,
+  recipient_name TEXT NOT NULL,
+  recipient_organisation TEXT,
+  recipient_email TEXT,
+  specialty TEXT,
+  urgency TEXT NOT NULL DEFAULT 'routine' CHECK (urgency IN ('routine', 'soon', 'urgent', 'emergency')),
+  reason TEXT,
+  history TEXT,
+  examination TEXT,
+  investigations TEXT,
+  medications TEXT,
+  allergies TEXT,
+  management TEXT,
+  request TEXT,
+  attach_note_ids INTEGER[] NOT NULL DEFAULT '{}',
+  attach_lab_order_ids INTEGER[] NOT NULL DEFAULT '{}',
+  consent_confirmed BOOLEAN NOT NULL DEFAULT false,
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'finalised', 'sent', 'completed', 'cancelled')),
+  finalised_at TIMESTAMPTZ,
+  sent_at TIMESTAMPTZ,
+  sent_to TEXT,
+  shared_with_patient BOOLEAN NOT NULL DEFAULT false,
+  outcome_notes TEXT,
+  reply_file_id INTEGER REFERENCES files(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS referrals_patient_idx ON referrals (patient_id, created_at DESC);
 `;

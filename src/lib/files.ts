@@ -30,6 +30,7 @@ export interface StoredFile {
   content_type: string;
   size_bytes: number;
   family_id: number | null;
+  clinical: boolean;
 }
 
 function contentTypeFor(file: File): string {
@@ -41,7 +42,7 @@ function contentTypeFor(file: File): string {
   return 'application/octet-stream';
 }
 
-export async function saveUpload(file: File, opts: { folder: string; familyId?: number | null; uploadedBy: number }): Promise<StoredFile> {
+export async function saveUpload(file: File, opts: { folder: string; familyId?: number | null; uploadedBy: number; clinical?: boolean }): Promise<StoredFile> {
   if (!file || file.size === 0) throw new Error('No file was selected.');
   if (file.size > MAX_UPLOAD_BYTES) throw new Error('That file is too large (4 MB maximum). Try a smaller scan or a photo.');
   const contentType = contentTypeFor(file);
@@ -63,9 +64,9 @@ export async function saveUpload(file: File, opts: { folder: string; familyId?: 
   }
 
   const rows = await sql<StoredFile>`
-    INSERT INTO files (storage_key, file_name, content_type, size_bytes, family_id, uploaded_by)
-    VALUES (${storageKey}, ${safeName}, ${contentType}, ${file.size}, ${opts.familyId ?? null}, ${opts.uploadedBy})
-    RETURNING id, file_name, content_type, size_bytes, family_id
+    INSERT INTO files (storage_key, file_name, content_type, size_bytes, family_id, uploaded_by, clinical)
+    VALUES (${storageKey}, ${safeName}, ${contentType}, ${file.size}, ${opts.familyId ?? null}, ${opts.uploadedBy}, ${opts.clinical ?? false})
+    RETURNING id, file_name, content_type, size_bytes, family_id, clinical
   `;
   return rows[0];
 }

@@ -50,7 +50,7 @@ export default async function ClinicBoardPage({ searchParams }: { searchParams: 
         <ul className="divide-y divide-line">
           {results.slice(0, 8).map((p) => (
             <li key={p.id} className="py-3">
-              <ActionForm action={checkInPatient} submitLabel="Check in" submitClassName="btn-clay btn-sm" inline>
+              <ActionForm action={checkInPatient} submitLabel="Check in" submitClassName="btn-clay btn-sm" inline resetOnSuccess>
                 <input type="hidden" name="patient_id" value={p.id} />
                 {clinical ? <input type="hidden" name="then" value="open" /> : null}
                 <span className="min-w-48 font-semibold">

@@ -6,6 +6,8 @@ import { FromYourDoctor } from '@/components/portal/FromYourDoctor';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { Field } from '@/components/ui/Field';
 import { getFamilyPrescriptions, getPatientPortalNotes, getPrescriptionItems } from '@/lib/clinical';
+import { getPortalLabResults } from '@/lib/labs';
+import { getPortalReferrals } from '@/lib/referrals';
 import { formatDate } from '@/lib/format';
 import { getFamily, getPatient } from '@/lib/patients';
 import { requirePatient } from '@/lib/session';
@@ -14,7 +16,16 @@ export default async function PortalPatientPage({ params }: { params: Promise<{ 
   const user = await requirePatient();
   const patient = await getPatient(Number((await params).id));
   if (!patient || patient.family_id !== user.familyId) notFound();
-  const [family, familyNotes, familyRx] = await Promise.all([getFamily(patient.family_id), getPatientPortalNotes(patient.family_id), getFamilyPrescriptions(patient.family_id)]);
+  const [family, familyNotes, familyRx, familyLabs, familyReferrals] = await Promise.all([
+    getFamily(patient.family_id),
+    getPatientPortalNotes(patient.family_id),
+    getFamilyPrescriptions(patient.family_id),
+    getPortalLabResults(patient.family_id),
+    getPortalReferrals(patient.family_id),
+  ]);
+  const labOrders = familyLabs.orders.filter((o) => o.patient_id === patient.id);
+  const labs = { orders: labOrders, results: familyLabs.results, attachments: familyLabs.attachments };
+  const referrals = familyReferrals.filter((r) => r.patient_id === patient.id);
   const notes = familyNotes.filter((n) => n.patient_id === patient.id);
   const prescriptions = familyRx.filter((r) => r.patient_id === patient.id);
   const rxItems = await getPrescriptionItems(prescriptions.map((r) => r.id));
@@ -23,7 +34,7 @@ export default async function PortalPatientPage({ params }: { params: Promise<{ 
     <div className="space-y-6">
       <Link href="/portal" className="font-label text-xs font-bold uppercase tracking-[0.12em] text-ink-soft hover:text-teal">← Back</Link>
       <PatientCardHeader patient={patient} familyName={family?.account_name ?? ''} />
-      <FromYourDoctor notes={notes} prescriptions={prescriptions} items={rxItems} showNames={false} />
+      <FromYourDoctor notes={notes} prescriptions={prescriptions} items={rxItems} labs={labs} referrals={referrals} showNames={false} />
       <div className="grid gap-6 md:grid-cols-2">
         <section className="card">
           <h2 className="card-title mb-3">Health summary</h2>

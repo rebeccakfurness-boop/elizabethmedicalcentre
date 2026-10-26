@@ -4,7 +4,9 @@ import { checkInPatient } from '@/app/actions/clinical';
 import { moveToFamily, setPatientStatus, updateMedical } from '@/app/actions/patients';
 import { TriageBadge } from '@/components/clinical/Badges';
 import { NoteEditor } from '@/components/clinical/NoteEditor';
+import { LabOrderForm, LabOrderList } from '@/components/clinical/Labs';
 import { NoteList } from '@/components/clinical/NoteList';
+import { NewReferralForm, ReferralList } from '@/components/clinical/Referrals';
 import { PatientCardHeader } from '@/components/patients/PatientCardHeader';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { ClaimStatusBadge, InvoiceStatusBadge, Pill } from '@/components/ui/Badges';
@@ -14,6 +16,8 @@ import { getClinicSettings, listClaims, listInvoices } from '@/lib/billing';
 import { ENCOUNTER_STATUS_LABELS, getNotesForPatient, getPatientEncounters, getPatientPrescriptions, getPrescriptionItems } from '@/lib/clinical';
 import { query } from '@/lib/db';
 import { ageFrom, formatClinicTime, formatDate, formatIDR } from '@/lib/format';
+import { getLabResults, getPatientLabOrders } from '@/lib/labs';
+import { getPatientReferrals } from '@/lib/referrals';
 import { getFamily, getFamilyMembers, getPatient } from '@/lib/patients';
 import { audit, requirePermission } from '@/lib/session';
 
@@ -47,7 +51,8 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
     clinical ? getPatientPrescriptions(patient.id) : Promise.resolve([]),
     getClinicSettings(),
   ]);
-  const rxItems = await getPrescriptionItems(prescriptions.map((r) => r.id));
+  const [labOrders, referrals] = clinical ? await Promise.all([getPatientLabOrders(patient.id), getPatientReferrals(patient.id)]) : [[], []];
+  const [rxItems, labResults] = await Promise.all([getPrescriptionItems(prescriptions.map((r) => r.id)), getLabResults(labOrders.slice(0, 10).map((o) => o.id))]);
   const openVisit = encounters.find((e) => ['waiting', 'triaged', 'in_consultation'].includes(e.status));
   const insuranceExpired = patient.insurance_expiry && patient.insurance_expiry < new Date().toISOString().slice(0, 10);
 
@@ -206,7 +211,7 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
           </p>
         ) : (
           <div className="mb-5 rounded-xl bg-paper p-3">
-            <ActionForm action={checkInPatient} submitLabel={clinical ? 'Start visit' : 'Check in to clinic'} submitClassName="btn-clay btn-sm" inline>
+            <ActionForm action={checkInPatient} submitLabel={clinical ? 'Start visit' : 'Check in to clinic'} submitClassName="btn-clay btn-sm" inline resetOnSuccess>
               <input type="hidden" name="patient_id" value={patient.id} />
               {clinical ? <input type="hidden" name="then" value="open" /> : null}
               <input className="input w-72 py-1.5" name="presenting_complaint" placeholder="Reason for visit" required aria-label="Reason for visit" />
@@ -286,6 +291,27 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
           </div>
         </div>
       </section>
+
+      {clinical ? (
+        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="card" aria-labelledby="labs">
+            <h2 id="labs" className="card-title mb-3">Blood tests</h2>
+            <LabOrderList orders={labOrders.slice(0, 10)} results={labResults} />
+            <details className="mt-4">
+              <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">+ Order tests</summary>
+              <div className="mt-3"><LabOrderForm patientId={patient.id} /></div>
+            </details>
+          </section>
+          <section className="card" aria-labelledby="referrals">
+            <h2 id="referrals" className="card-title mb-3">Referrals</h2>
+            <ReferralList referrals={referrals} />
+            <details className="mt-4">
+              <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">+ Write a referral</summary>
+              <div className="mt-3"><NewReferralForm patientId={patient.id} /></div>
+            </details>
+          </section>
+        </div>
+      ) : null}
 
       {manage ? (
         <details className="card mt-6">

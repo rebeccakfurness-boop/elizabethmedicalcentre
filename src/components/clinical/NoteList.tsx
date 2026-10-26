@@ -39,7 +39,7 @@ export function NoteList({ notes, viewerId, clinical, linkEncounters = false }: 
                     <option value="patient">🏠 Shared with patient</option>
                   </select>
                 </ActionForm>
-                <ActionForm action={addAddendum} submitLabel="Add addendum" submitClassName="btn-ghost btn-sm">
+                <ActionForm action={addAddendum} submitLabel="Add addendum" submitClassName="btn-ghost btn-sm" resetOnSuccess>
                   <input type="hidden" name="note_id" value={n.id} />
                   <textarea name="body" rows={2} className="input text-sm" placeholder="Correction or later information" aria-label="Addendum" />
                 </ActionForm>

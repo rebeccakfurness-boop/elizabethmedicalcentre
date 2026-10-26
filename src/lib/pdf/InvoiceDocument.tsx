@@ -1,5 +1,5 @@
-import { Document, G, Page, Path, StyleSheet, Svg, Text, View } from '@react-pdf/renderer';
-import { BRAND_SVG } from '@/components/brand-svg';
+import { Document, Page, StyleSheet, Text, View } from '@react-pdf/renderer';
+import { LogoMark } from '@/lib/pdf/brand';
 import type { InvoiceItemRow, InvoiceRow } from '@/lib/billing';
 import { formatDate, formatIDR } from '@/lib/format';
 
@@ -34,25 +34,6 @@ const s = StyleSheet.create({
   footer: { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: TEAL, color: CREAM, paddingVertical: 10, paddingHorizontal: 40, fontSize: 8, flexDirection: 'row', justifyContent: 'space-between' },
   stamp: { marginTop: 16, alignSelf: 'flex-start', borderWidth: 1.5, borderColor: TEAL, color: TEAL, fontFamily: 'Helvetica-Bold', fontSize: 14, paddingVertical: 4, paddingHorizontal: 10 },
 });
-
-function LogoMark({ width }: { width: number }) {
-  const { viewBox, paths } = BRAND_SVG['logo-combination'];
-  const [, , w, h] = viewBox.split(' ').map(Number);
-  const shapes = [...paths.matchAll(/<path(?: transform="translate\(([-\d.]+) ([-\d.]+)\)")? d="([^"]+)"\/>/g)];
-  return (
-    <Svg viewBox={viewBox} style={{ width, height: (width * h) / w }}>
-      {shapes.map((m, i) =>
-        m[1] ? (
-          <G key={i} transform={`translate(${m[1]} ${m[2]})`}>
-            <Path d={m[3]} fill={CREAM} />
-          </G>
-        ) : (
-          <Path key={i} d={m[3]} fill={CREAM} />
-        )
-      )}
-    </Svg>
-  );
-}
 
 export interface ClinicDetails {
   legal_name: string;

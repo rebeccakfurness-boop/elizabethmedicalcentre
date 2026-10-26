@@ -1,6 +1,6 @@
 'use client';
 
-import { useActionState, useEffect, useRef } from 'react';
+import { startTransition, useActionState, useEffect, useRef } from 'react';
 import type { FormState } from '@/app/actions/auth';
 
 /** Wraps a server action form: shows its error/success message and disables submit while pending. */
@@ -35,7 +35,12 @@ export function ActionForm({
       action={formAction}
       className={inline ? 'inline-flex flex-wrap items-center gap-2' : className}
       onSubmit={(e) => {
-        if (confirm && !window.confirm(confirm)) e.preventDefault();
+        // Submitting by hand stops React resetting every field after every action, so a
+        // validation error never wipes what the user typed. The submitter's name/value is kept.
+        e.preventDefault();
+        if (confirm && !window.confirm(confirm)) return;
+        const data = new FormData(e.currentTarget, (e.nativeEvent as SubmitEvent).submitter);
+        startTransition(() => formAction(data));
       }}
     >
       {children}

@@ -1,9 +1,10 @@
 import Link from 'next/link';
 import { PageHeader, StatTile } from '@/components/dashboard/PageHeader';
-import { can, ROLE_LABELS } from '@/lib/auth';
+import { can, isClinical, ROLE_LABELS } from '@/lib/auth';
 import { getFinanceSummary } from '@/lib/billing';
 import { sql } from '@/lib/db';
 import { formatIDR } from '@/lib/format';
+import { countLabsToReview } from '@/lib/labs';
 import { requireStaff } from '@/lib/session';
 
 export default async function DashboardHome({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
@@ -15,6 +16,7 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
            (SELECT COUNT(*)::int FROM patients WHERE created_at >= date_trunc('month', now())) AS new_this_month
   `;
   const finance = can(user.role, 'finance') ? await getFinanceSummary() : null;
+  const labs = isClinical(user.clinicalRole) ? await countLabsToReview() : null;
   const [clinic] = await sql<{ in_clinic: number; waiting: number; urgent: number; seen_today: number }>`
     SELECT COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged', 'in_consultation'))::int AS in_clinic,
            COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged'))::int AS waiting,
@@ -38,6 +40,15 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
         <StatTile label="Waiting to be seen" value={clinic.waiting} href="/dashboard/clinic" />
         <StatTile label="Very urgent or emergency waiting" value={clinic.urgent} tone={clinic.urgent ? 'alert' : 'good'} href="/dashboard/clinic" />
         <StatTile label="Seen today" value={clinic.seen_today} />
+        {labs ? (
+          <StatTile
+            label="Results to review"
+            value={labs.to_review}
+            note={labs.critical ? `${labs.critical} with critical values` : undefined}
+            tone={labs.critical ? 'alert' : labs.to_review ? 'default' : 'good'}
+            href="/dashboard/labs"
+          />
+        ) : null}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">

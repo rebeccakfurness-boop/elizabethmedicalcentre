@@ -12,7 +12,9 @@ import {
 } from '@/app/actions/clinical';
 import { ApprovalBanner, TriageBadge } from '@/components/clinical/Badges';
 import { NoteEditor } from '@/components/clinical/NoteEditor';
+import { LabOrderForm, LabOrderList } from '@/components/clinical/Labs';
 import { NoteList } from '@/components/clinical/NoteList';
+import { NewReferralForm, ReferralList } from '@/components/clinical/Referrals';
 import { ProtocolView } from '@/components/clinical/ProtocolView';
 import { RxItemForm } from '@/components/clinical/RxItemForm';
 import { TriageForm } from '@/components/clinical/TriageForm';
@@ -32,8 +34,11 @@ import {
   getPrescriptionItems,
 } from '@/lib/clinical';
 import { ageFrom, formatDate } from '@/lib/format';
+import { getEncounterLabOrders, getLabResults } from '@/lib/labs';
+import { getEncounterReferrals } from '@/lib/referrals';
 import { audit, requireClinical } from '@/lib/session';
 import { allergyWarnings } from '@/clinical/drugs';
+import { PROTOCOL_TESTS } from '@/clinical/labs';
 import { LEAFLETS } from '@/clinical/leaflets';
 import { PROTOCOLS, PROTOCOLS_BY_SLUG, suggestProtocols } from '@/clinical/protocols';
 import { TRIAGE_VERSION } from '@/clinical/triage';
@@ -57,14 +62,16 @@ export default async function EncounterPage({ params, searchParams }: { params: 
   const { rx: rxPreset } = await searchParams;
   await audit(user.id, 'view', 'encounter', enc.id);
 
-  const [obs, notes, prescriptions, approvals, settings] = await Promise.all([
+  const [obs, notes, prescriptions, approvals, settings, labOrders, referrals] = await Promise.all([
     getObservations(enc.id),
     getNotesForEncounter(enc.id, user),
     getEncounterPrescriptions(enc.id),
     getApprovals(),
     getClinicSettings(),
+    getEncounterLabOrders(enc.id),
+    getEncounterReferrals(enc.id),
   ]);
-  const items = await getPrescriptionItems(prescriptions.map((p) => p.id));
+  const [items, labResults] = await Promise.all([getPrescriptionItems(prescriptions.map((p) => p.id)), getLabResults(labOrders.map((o) => o.id))]);
   const age = ageFrom(enc.date_of_birth);
   const closed = ['completed', 'left', 'cancelled'].includes(enc.status);
   const prescriber = canPrescribe(user.clinicalRole);
@@ -150,7 +157,7 @@ export default async function EncounterPage({ params, searchParams }: { params: 
               <details className="mt-4">
                 <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">Record repeat observations</summary>
                 <div className="mt-3">
-                  <ActionForm action={addObservations} submitLabel="Save observations" submitClassName="btn-primary btn-sm">
+                  <ActionForm action={addObservations} submitLabel="Save observations" submitClassName="btn-primary btn-sm" resetOnSuccess>
                     <input type="hidden" name="encounter_id" value={enc.id} />
                     <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                       <Field label="HR" name="heart_rate" type="number" />
@@ -263,6 +270,30 @@ export default async function EncounterPage({ params, searchParams }: { params: 
             ) : null}
           </section>
 
+          {/* Blood tests */}
+          <section id="labs" className="card scroll-mt-6">
+            <h2 className="card-title mb-3">Blood tests</h2>
+            <LabOrderList orders={labOrders} results={labResults} />
+            {!closed ? (
+              <details className="mt-4" open={!labOrders.length && !!protocol && !!PROTOCOL_TESTS[protocol.slug]}>
+                <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">+ Order tests</summary>
+                <div className="mt-3">
+                  <LabOrderForm key={protocol?.slug ?? 'none'} patientId={enc.patient_id} encounterId={enc.id} suggested={protocol ? PROTOCOL_TESTS[protocol.slug] ?? [] : []} />
+                </div>
+              </details>
+            ) : null}
+          </section>
+
+          {/* Referral */}
+          <section id="refer" className="card scroll-mt-6">
+            <h2 className="card-title mb-3">Referral</h2>
+            {referrals.length ? <div className="mb-4"><ReferralList referrals={referrals} /></div> : null}
+            <details open={!referrals.length && /referred|transferred/i.test(enc.disposition ?? '')}>
+              <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">+ Refer to hospital, specialist or allied health</summary>
+              <div className="mt-3"><NewReferralForm patientId={enc.patient_id} encounterId={enc.id} /></div>
+            </details>
+          </section>
+
           {/* Complete */}
           {!closed ? (
             <section className="card border-teal/40">
@@ -306,7 +337,7 @@ export default async function EncounterPage({ params, searchParams }: { params: 
             <h2 className="card-title mb-3">Protocol</h2>
             <ActionForm action={setProtocol} submitLabel="Use" submitClassName="btn-ghost btn-sm" inline>
               <input type="hidden" name="encounter_id" value={enc.id} />
-              <select name="protocol_slug" defaultValue={enc.protocol_slug ?? suggestions[0]?.slug ?? ''} className="input flex-1 py-1.5 text-sm" aria-label="Protocol">
+              <select key={enc.protocol_slug ?? 'none'} name="protocol_slug" defaultValue={enc.protocol_slug ?? suggestions[0]?.slug ?? ''} className="input flex-1 py-1.5 text-sm" aria-label="Protocol">
                 <option value="">None</option>
                 {suggestions.length ? (
                   <optgroup label="Suggested for this complaint">

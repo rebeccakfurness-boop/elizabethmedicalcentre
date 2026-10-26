@@ -5,7 +5,7 @@ import { sessionOptions, STAFF_ROLES, type SessionData } from '@/lib/auth';
 // First line of defence only: every page and server action re-checks the user and their role
 // against the database (src/lib/session.ts).
 export const config = {
-  matcher: ['/dashboard/:path*', '/portal/:path*', '/account/:path*', '/print/:path*', '/api/files/:path*', '/api/invoices/:path*'],
+  matcher: ['/dashboard/:path*', '/portal/:path*', '/account/:path*', '/print/:path*', '/api/files/:path*', '/api/invoices/:path*', '/api/referrals/:path*'],
 };
 
 export async function proxy(req: NextRequest) {

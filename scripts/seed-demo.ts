@@ -82,6 +82,15 @@ async function main() {
     }
 
     await q(`UPDATE clinic_settings SET consultation_fee = 450000`);
+    // Made-up referral contacts (example.test addresses never deliver).
+    for (const [name, org, kind, specialty, email] of [
+      ['Emergency Department', 'Demo Regional Hospital', 'hospital', 'Emergency department', 'ed@hospital.example.test'],
+      ['Dr Demo Ortho', 'Demo Specialist Centre', 'specialist', 'Orthopaedics', 'ortho@specialist.example.test'],
+      ['Demo Physio', 'Demo Physiotherapy', 'allied_health', 'Physiotherapy', 'physio@allied.example.test'],
+      ['Radiology', 'Demo Imaging', 'imaging', 'X-ray', null],
+    ]) {
+      await q(`INSERT INTO referral_contacts (name, organisation, kind, specialty, email) VALUES ($1, $2, $3, $4, $5)`, [name, org, kind, specialty, email]);
+    }
     await q(`INSERT INTO encounters (patient_id, encounter_type, presenting_complaint, created_by)
       SELECT p.id, 'walk_in', 'Jellyfish sting on left leg while surfing, burning pain', u.id
       FROM patients p, users u WHERE p.first_name = 'Robin' AND u.email = 'admin@demo.test'`);

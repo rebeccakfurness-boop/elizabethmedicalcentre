@@ -13,8 +13,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
     { href: '/dashboard/patients', label: 'Patients', section: 'Patients' },
     { href: '/dashboard/families', label: 'Family accounts', section: 'Patients' },
   ];
+  if (!isClinical(user.clinicalRole) && can(user.role, 'managePatients')) {
+    items.push({ href: '/dashboard/referrals/contacts', label: 'Referral directory', section: 'Patients' });
+  }
   if (isClinical(user.clinicalRole)) {
     items.push(
+      { href: '/dashboard/labs', label: 'Blood tests', section: 'Clinic' },
+      { href: '/dashboard/referrals', label: 'Referrals', section: 'Clinic' },
       { href: '/dashboard/protocols', label: 'Protocols', section: 'Clinic' },
       { href: '/dashboard/formulary', label: 'Formulary & leaflets', section: 'Clinic' }
     );
