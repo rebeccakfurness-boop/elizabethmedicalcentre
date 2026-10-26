@@ -22,6 +22,7 @@ interface Line {
 
 export interface InvoiceFormInitial {
   id?: number;
+  encounterId?: number | null;
   isDraft?: boolean;
   familyId: number;
   billedToName: string;
@@ -87,6 +88,7 @@ export function InvoiceForm({
     <form action={formAction} className="space-y-6">
       {initial.id ? <input type="hidden" name="id" value={initial.id} /> : null}
       <input type="hidden" name="family_id" value={initial.familyId} />
+      {initial.encounterId ? <input type="hidden" name="encounter_id" value={initial.encounterId} /> : null}
       <input type="hidden" name="items" value={JSON.stringify(lines.map(({ key: _key, ...l }) => l))} />
       <datalist id="common-items">
         {COMMON_ITEMS.map((c) => <option key={c} value={c} />)}

@@ -1,6 +1,6 @@
 /** Bump whenever SCHEMA_SQL changes, so already-initialised databases re-run it. Every statement
  * must stay idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING). */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 // Money is stored as BIGINT whole rupiah (IDR has no minor unit in practice).
 export const SCHEMA_SQL = `
@@ -284,4 +284,127 @@ INSERT INTO budget_categories (name, kind, sort_order) VALUES
   ('Bank fees', 'expense', 18),
   ('Other expenses', 'expense', 19)
 ON CONFLICT (name) DO NOTHING;
+
+-- ---------- Clinical record (schema v2) ----------
+
+-- Clinical role is separate from the admin role: only users with a clinical role can read
+-- clinical notes, whatever their admin level. Only doctors can prescribe.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS clinical_role TEXT
+  CHECK (clinical_role IS NULL OR clinical_role IN ('doctor', 'nurse', 'midwife', 'pharmacist'));
+ALTER TABLE users ADD COLUMN IF NOT EXISTS registration_number TEXT;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS dictation_enabled BOOLEAN NOT NULL DEFAULT true;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS consultation_fee BIGINT NOT NULL DEFAULT 0;
+
+-- A visit: check-in -> triage -> consultation -> completed.
+CREATE TABLE IF NOT EXISTS encounters (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  encounter_type TEXT NOT NULL DEFAULT 'walk_in'
+    CHECK (encounter_type IN ('walk_in', 'appointment', 'home_visit', 'telemedicine', 'follow_up')),
+  status TEXT NOT NULL DEFAULT 'waiting'
+    CHECK (status IN ('waiting', 'triaged', 'in_consultation', 'completed', 'left', 'cancelled')),
+  presenting_complaint TEXT NOT NULL,
+  protocol_slug TEXT,
+  arrived_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  triage_category TEXT CHECK (triage_category IS NULL OR triage_category IN ('red', 'orange', 'yellow', 'green')),
+  triage_score INTEGER,
+  triage_discriminators TEXT[] NOT NULL DEFAULT '{}',
+  triaged_at TIMESTAMPTZ,
+  triaged_by INTEGER REFERENCES users(id),
+  clinician_id INTEGER REFERENCES users(id),
+  consultation_started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  diagnosis TEXT,
+  disposition TEXT,
+  invoice_id INTEGER REFERENCES invoices(id),
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS encounters_patient_idx ON encounters(patient_id);
+CREATE INDEX IF NOT EXISTS encounters_status_idx ON encounters(status);
+
+-- Observations (vital signs). Several sets per visit are allowed (repeat obs).
+CREATE TABLE IF NOT EXISTS observations (
+  id SERIAL PRIMARY KEY,
+  encounter_id INTEGER NOT NULL REFERENCES encounters(id) ON DELETE CASCADE,
+  taken_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  taken_by INTEGER REFERENCES users(id),
+  heart_rate INTEGER,
+  resp_rate INTEGER,
+  systolic_bp INTEGER,
+  diastolic_bp INTEGER,
+  temperature NUMERIC(4,1),
+  spo2 INTEGER,
+  avpu TEXT CHECK (avpu IS NULL OR avpu IN ('alert', 'confused', 'voice', 'pain', 'unresponsive')),
+  mobility TEXT CHECK (mobility IS NULL OR mobility IN ('walking', 'with_help', 'stretcher')),
+  pain_score INTEGER CHECK (pain_score IS NULL OR pain_score BETWEEN 0 AND 10),
+  glucose NUMERIC(4,1),
+  weight_kg NUMERIC(5,1),
+  trauma BOOLEAN NOT NULL DEFAULT false,
+  tews INTEGER
+);
+
+-- Clinical notes. visibility: clinical = clinical staff only; staff = all staff;
+-- patient = all staff and the patient's family portal. Signed notes can't be edited;
+-- corrections are added as addenda.
+CREATE TABLE IF NOT EXISTS clinical_notes (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  encounter_id INTEGER REFERENCES encounters(id),
+  author_id INTEGER NOT NULL REFERENCES users(id),
+  note_type TEXT NOT NULL DEFAULT 'consultation'
+    CHECK (note_type IN ('consultation', 'triage', 'nursing', 'procedure', 'phone', 'admin', 'visit_summary', 'addendum')),
+  visibility TEXT NOT NULL DEFAULT 'clinical' CHECK (visibility IN ('clinical', 'staff', 'patient')),
+  subjective TEXT,
+  objective TEXT,
+  assessment TEXT,
+  plan TEXT,
+  body TEXT,
+  amends_note_id INTEGER REFERENCES clinical_notes(id),
+  dictated BOOLEAN NOT NULL DEFAULT false,
+  signed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS clinical_notes_patient_idx ON clinical_notes(patient_id);
+
+CREATE TABLE IF NOT EXISTS prescriptions (
+  id SERIAL PRIMARY KEY,
+  patient_id INTEGER NOT NULL REFERENCES patients(id),
+  encounter_id INTEGER REFERENCES encounters(id),
+  prescriber_id INTEGER NOT NULL REFERENCES users(id),
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'issued', 'cancelled')),
+  leaflet_slugs TEXT[] NOT NULL DEFAULT '{}',
+  notes TEXT,
+  allergy_override_reason TEXT,
+  issued_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS prescription_items (
+  id SERIAL PRIMARY KEY,
+  prescription_id INTEGER NOT NULL REFERENCES prescriptions(id) ON DELETE CASCADE,
+  drug_code TEXT,
+  drug_name TEXT NOT NULL,
+  dose TEXT NOT NULL,
+  route TEXT NOT NULL DEFAULT 'oral',
+  frequency TEXT NOT NULL,
+  duration TEXT,
+  quantity TEXT,
+  instructions TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+
+-- Clinical sign-off for protocols, drug sheets and patient leaflets. Content lives in code
+-- (src/clinical) with a version number; a new version needs a new approval.
+CREATE TABLE IF NOT EXISTS content_approvals (
+  id SERIAL PRIMARY KEY,
+  kind TEXT NOT NULL CHECK (kind IN ('protocol', 'drug', 'leaflet', 'triage')),
+  slug TEXT NOT NULL,
+  version INTEGER NOT NULL,
+  approved_by INTEGER NOT NULL REFERENCES users(id),
+  approved_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  comments TEXT,
+  UNIQUE (kind, slug, version)
+);
 `;

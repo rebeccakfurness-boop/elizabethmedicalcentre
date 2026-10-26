@@ -1,7 +1,7 @@
 import { Field, Select, TextArea } from '@/components/ui/Field';
 import type { Patient } from '@/lib/patients';
 
-export function PatientFields({ patient, insurers, includeMedical = false }: { patient?: Patient | null; insurers: { id: number; name: string }[]; includeMedical?: boolean }) {
+export function PatientFields({ patient, insurers, includeMedical = false, clinical = false }: { patient?: Patient | null; insurers: { id: number; name: string }[]; includeMedical?: boolean; clinical?: boolean }) {
   const p = patient;
   return (
     <div className="space-y-6">
@@ -35,8 +35,12 @@ export function PatientFields({ patient, insurers, includeMedical = false }: { p
           <legend className="card-title mb-3">Medical</legend>
           <Select label="Blood type" name="blood_type" placeholder="Unknown" options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v) => ({ value: v, label: v }))} />
           <TextArea label="Allergies" name="allergies" placeholder="e.g. Penicillin – rash" />
-          <TextArea label="Current medications" name="current_medications" />
-          <TextArea label="Medical notes" name="medical_notes" />
+          {clinical ? (
+            <>
+              <TextArea label="Current medications" name="current_medications" />
+              <TextArea label="Medical notes" name="medical_notes" />
+            </>
+          ) : null}
         </fieldset>
       ) : null}
     </div>

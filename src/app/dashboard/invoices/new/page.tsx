@@ -3,13 +3,14 @@ import { saveInvoice } from '@/app/actions/billing';
 import { InvoiceForm } from '@/components/billing/InvoiceForm';
 import { PageHeader } from '@/components/dashboard/PageHeader';
 import { defaultDueDate, getClinicSettings } from '@/lib/billing';
-import { todayISO } from '@/lib/format';
+import { getEncounter, getEncounterPrescriptions, getPrescriptionItems } from '@/lib/clinical';
+import { formatDate, todayISO } from '@/lib/format';
 import { getFamily, getFamilyMembers, getInsurers, listFamilies } from '@/lib/patients';
 import { requirePermission } from '@/lib/session';
 
-export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ family?: string; patient?: string; q?: string }> }) {
+export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ family?: string; patient?: string; encounter?: string; q?: string }> }) {
   await requirePermission('finance');
-  const { family: familyParam, patient: patientParam, q = '' } = await searchParams;
+  const { family: familyParam, patient: patientParam, encounter: encounterParam, q = '' } = await searchParams;
   const family = familyParam ? await getFamily(Number(familyParam)) : null;
 
   if (!family) {
@@ -46,9 +47,31 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
   const focus = members.find((m) => m.id === Number(patientParam)) ?? holder;
   const issueDate = todayISO();
 
+  // Invoicing a finished visit: consultation fee plus each issued medicine (prices to fill in).
+  const encounter = encounterParam ? await getEncounter(Number(encounterParam)) : null;
+  const visit = encounter && encounter.family_id === family.id && encounter.status === 'completed' && !encounter.invoice_id ? encounter : null;
+  const visitPatient = visit ? members.find((m) => m.id === visit.patient_id) : null;
+  let items = [{ patientId: focus?.id ?? null, description: '', quantity: 1, unitPrice: 0, insuranceCovered: !!focus?.insurer_id }];
+  if (visit) {
+    const rx = (await getEncounterPrescriptions(visit.id)).filter((r) => r.status === 'issued');
+    const meds = await getPrescriptionItems(rx.map((r) => r.id));
+    const covered = !!visitPatient?.insurer_id;
+    items = [
+      { patientId: visit.patient_id, description: `${visit.encounter_type === 'home_visit' ? 'Home / hotel visit' : 'GP consultation'} – ${formatDate(visit.arrived_at)}`, quantity: 1, unitPrice: Number(settings.consultation_fee), insuranceCovered: covered },
+      ...meds.map((m) => ({ patientId: visit.patient_id, description: `Medication: ${m.drug_name}${m.quantity ? ` (${m.quantity})` : ''}`, quantity: 1, unitPrice: 0, insuranceCovered: covered })),
+    ];
+  }
+
   return (
     <div className="max-w-6xl">
       <PageHeader eyebrow={`Family account · ${family.account_name}`} title="New invoice" back={{ href: `/dashboard/families/${family.id}`, label: family.account_name }} />
+      {visit ? (
+        <p className="mb-4 rounded-xl bg-teal-soft p-3 text-sm">
+          Billing the visit on {formatDate(visit.arrived_at)} for {visit.first_name} {visit.last_name}. Medicines from the prescription are listed at Rp 0: add their prices or remove them.
+        </p>
+      ) : encounterParam ? (
+        <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-900">That visit is not finished, belongs to another family, or already has an invoice.</p>
+      ) : null}
       <div className="card">
         <InvoiceForm
           action={saveInvoice}
@@ -61,9 +84,10 @@ export default async function NewInvoicePage({ searchParams }: { searchParams: P
             issueDate,
             dueDate: defaultDueDate(issueDate, settings.invoice_due_days),
             discount: 0,
-            insurerId: focus?.insurer_id ?? null,
+            encounterId: visit?.id ?? null,
+            insurerId: (visitPatient ?? focus)?.insurer_id ?? null,
             notes: '',
-            items: [{ patientId: focus?.id ?? null, description: '', quantity: 1, unitPrice: 0, insuranceCovered: !!focus?.insurer_id }],
+            items,
           }}
         />
       </div>

@@ -15,6 +15,12 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
            (SELECT COUNT(*)::int FROM patients WHERE created_at >= date_trunc('month', now())) AS new_this_month
   `;
   const finance = can(user.role, 'finance') ? await getFinanceSummary() : null;
+  const [clinic] = await sql<{ in_clinic: number; waiting: number; urgent: number; seen_today: number }>`
+    SELECT COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged', 'in_consultation'))::int AS in_clinic,
+           COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged'))::int AS waiting,
+           COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged') AND triage_category IN ('red', 'orange'))::int AS urgent,
+           COUNT(*) FILTER (WHERE status = 'completed' AND completed_at >= (now() AT TIME ZONE 'Asia/Makassar')::date AT TIME ZONE 'Asia/Makassar')::int AS seen_today
+    FROM encounters WHERE status IN ('waiting', 'triaged', 'in_consultation') OR completed_at >= now() - interval '1 day'`;
 
   return (
     <div className="max-w-6xl">
@@ -25,6 +31,14 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
         <input className="input" name="q" placeholder="Find a patient by name, MRN, phone or email" aria-label="Find a patient" />
         <button className="btn-primary">Search</button>
       </form>
+
+      <h2 className="card-title mb-3">Clinic today</h2>
+      <div className="mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <StatTile label="In the clinic" value={clinic.in_clinic} href="/dashboard/clinic" />
+        <StatTile label="Waiting to be seen" value={clinic.waiting} href="/dashboard/clinic" />
+        <StatTile label="Very urgent or emergency waiting" value={clinic.urgent} tone={clinic.urgent ? 'alert' : 'good'} href="/dashboard/clinic" />
+        <StatTile label="Seen today" value={clinic.seen_today} />
+      </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <StatTile label="Active patients" value={counts.patients} href="/dashboard/patients" />

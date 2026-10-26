@@ -2,8 +2,10 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { updateMyContactDetails } from '@/app/actions/portal';
 import { PatientCardHeader } from '@/components/patients/PatientCardHeader';
+import { FromYourDoctor } from '@/components/portal/FromYourDoctor';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { Field } from '@/components/ui/Field';
+import { getFamilyPrescriptions, getPatientPortalNotes, getPrescriptionItems } from '@/lib/clinical';
 import { formatDate } from '@/lib/format';
 import { getFamily, getPatient } from '@/lib/patients';
 import { requirePatient } from '@/lib/session';
@@ -12,12 +14,16 @@ export default async function PortalPatientPage({ params }: { params: Promise<{ 
   const user = await requirePatient();
   const patient = await getPatient(Number((await params).id));
   if (!patient || patient.family_id !== user.familyId) notFound();
-  const family = await getFamily(patient.family_id);
+  const [family, familyNotes, familyRx] = await Promise.all([getFamily(patient.family_id), getPatientPortalNotes(patient.family_id), getFamilyPrescriptions(patient.family_id)]);
+  const notes = familyNotes.filter((n) => n.patient_id === patient.id);
+  const prescriptions = familyRx.filter((r) => r.patient_id === patient.id);
+  const rxItems = await getPrescriptionItems(prescriptions.map((r) => r.id));
 
   return (
     <div className="space-y-6">
       <Link href="/portal" className="font-label text-xs font-bold uppercase tracking-[0.12em] text-ink-soft hover:text-teal">← Back</Link>
       <PatientCardHeader patient={patient} familyName={family?.account_name ?? ''} />
+      <FromYourDoctor notes={notes} prescriptions={prescriptions} items={rxItems} showNames={false} />
       <div className="grid gap-6 md:grid-cols-2">
         <section className="card">
           <h2 className="card-title mb-3">Health summary</h2>

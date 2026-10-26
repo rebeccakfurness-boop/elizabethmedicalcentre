@@ -1,14 +1,19 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { checkInPatient } from '@/app/actions/clinical';
 import { moveToFamily, setPatientStatus, updateMedical } from '@/app/actions/patients';
+import { TriageBadge } from '@/components/clinical/Badges';
+import { NoteEditor } from '@/components/clinical/NoteEditor';
+import { NoteList } from '@/components/clinical/NoteList';
 import { PatientCardHeader } from '@/components/patients/PatientCardHeader';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { ClaimStatusBadge, InvoiceStatusBadge, Pill } from '@/components/ui/Badges';
 import { Field, Select, TextArea } from '@/components/ui/Field';
-import { can } from '@/lib/auth';
-import { listClaims, listInvoices } from '@/lib/billing';
+import { can, isClinical } from '@/lib/auth';
+import { getClinicSettings, listClaims, listInvoices } from '@/lib/billing';
+import { ENCOUNTER_STATUS_LABELS, getNotesForPatient, getPatientEncounters, getPatientPrescriptions, getPrescriptionItems } from '@/lib/clinical';
 import { query } from '@/lib/db';
-import { ageFrom, formatDate, formatIDR } from '@/lib/format';
+import { ageFrom, formatClinicTime, formatDate, formatIDR } from '@/lib/format';
 import { getFamily, getFamilyMembers, getPatient } from '@/lib/patients';
 import { audit, requirePermission } from '@/lib/session';
 
@@ -35,6 +40,15 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
     : [];
   const invoices = finance ? (await listInvoices({ familyId: patient.family_id })).filter((i) => invoiceIds.includes(i.id)) : [];
   const claims = finance ? (await listClaims({ familyId: patient.family_id })).filter((c) => c.patient_id === patient.id) : [];
+  const clinical = isClinical(user.clinicalRole);
+  const [encounters, notes, prescriptions, settings] = await Promise.all([
+    getPatientEncounters(patient.id),
+    getNotesForPatient(patient.id, user),
+    clinical ? getPatientPrescriptions(patient.id) : Promise.resolve([]),
+    getClinicSettings(),
+  ]);
+  const rxItems = await getPrescriptionItems(prescriptions.map((r) => r.id));
+  const openVisit = encounters.find((e) => ['waiting', 'triaged', 'in_consultation'].includes(e.status));
   const insuranceExpired = patient.insurance_expiry && patient.insurance_expiry < new Date().toISOString().slice(0, 10);
 
   return (
@@ -50,6 +64,9 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
         balance={finance ? family?.balance ?? 0 : null}
         actions={
           <>
+            {openVisit && clinical ? (
+              <Link href={`/dashboard/encounters/${openVisit.id}`} className="btn btn-sm bg-clay text-cream hover:bg-pulse">Open current visit</Link>
+            ) : null}
             {manage ? <Link href={`/dashboard/patients/${patient.id}/edit`} className="btn btn-sm bg-cream text-pulse hover:bg-white">Edit details</Link> : null}
             {finance ? (
               <Link href={`/dashboard/invoices/new?family=${patient.family_id}&patient=${patient.id}`} className="btn btn-sm bg-clay text-cream hover:bg-pulse">
@@ -73,8 +90,12 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
           )}
           <dl>
             <Row label="Blood type" value={patient.blood_type} />
-            <Row label="Current medications" value={patient.current_medications ? <span className="whitespace-pre-line">{patient.current_medications}</span> : null} />
-            <Row label="Medical notes" value={patient.medical_notes ? <span className="whitespace-pre-line">{patient.medical_notes}</span> : null} />
+            {clinical ? (
+              <>
+                <Row label="Current medications" value={patient.current_medications ? <span className="whitespace-pre-line">{patient.current_medications}</span> : null} />
+                <Row label="Medical notes" value={patient.medical_notes ? <span className="whitespace-pre-line">{patient.medical_notes}</span> : null} />
+              </>
+            ) : null}
           </dl>
           <details className="mt-4">
             <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">Update medical information</summary>
@@ -84,8 +105,12 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
                 <div className="grid gap-4 sm:grid-cols-2">
                   <Select label="Blood type" name="blood_type" defaultValue={patient.blood_type} placeholder="Unknown" options={['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'].map((v) => ({ value: v, label: v }))} />
                   <TextArea label="Allergies" name="allergies" defaultValue={patient.allergies} />
-                  <TextArea label="Current medications" name="current_medications" defaultValue={patient.current_medications} />
-                  <TextArea label="Medical notes" name="medical_notes" defaultValue={patient.medical_notes} />
+                  {clinical ? (
+                    <>
+                      <TextArea label="Current medications" name="current_medications" defaultValue={patient.current_medications} />
+                      <TextArea label="Medical notes" name="medical_notes" defaultValue={patient.medical_notes} />
+                    </>
+                  ) : null}
                 </div>
               </ActionForm>
             </div>
@@ -167,6 +192,100 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
           </section>
         ) : null}
       </div>
+
+      <section className="card mt-6" aria-labelledby="record">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 id="record" className="card-title">Clinical record</h2>
+          {!clinical ? <p className="text-xs text-ink-soft">🔒 Notes marked clinical-only are hidden from your account.</p> : null}
+        </div>
+
+        {openVisit ? (
+          <p className="mb-4 rounded-xl bg-teal-soft p-3 text-sm">
+            In the clinic now: <strong>{openVisit.presenting_complaint}</strong> · {ENCOUNTER_STATUS_LABELS[openVisit.status]}
+            {openVisit.triage_category ? <span className="ml-2"><TriageBadge category={openVisit.triage_category} /></span> : null}
+          </p>
+        ) : (
+          <div className="mb-5 rounded-xl bg-paper p-3">
+            <ActionForm action={checkInPatient} submitLabel={clinical ? 'Start visit' : 'Check in to clinic'} submitClassName="btn-clay btn-sm" inline>
+              <input type="hidden" name="patient_id" value={patient.id} />
+              {clinical ? <input type="hidden" name="then" value="open" /> : null}
+              <input className="input w-72 py-1.5" name="presenting_complaint" placeholder="Reason for visit" required aria-label="Reason for visit" />
+              <select className="input w-auto py-1.5" name="encounter_type" aria-label="Visit type">
+                <option value="walk_in">Walk-in</option>
+                <option value="appointment">Appointment</option>
+                <option value="follow_up">Follow-up</option>
+                <option value="home_visit">Home / hotel visit</option>
+                <option value="telemedicine">Phone / video</option>
+              </select>
+            </ActionForm>
+          </div>
+        )}
+
+        <div className="grid gap-6 lg:grid-cols-3">
+          <div className="lg:col-span-2">
+            <h3 className="mb-2 font-label text-xs font-bold uppercase tracking-wider text-ink-soft">Notes</h3>
+            {notes.length ? <NoteList notes={notes} viewerId={user.id} clinical={clinical} linkEncounters /> : <p className="text-sm text-ink-soft">No notes you can see yet.</p>}
+            <details className="mt-4">
+              <summary className="cursor-pointer font-label text-xs font-bold uppercase tracking-wider text-teal">
+                {clinical ? '+ Add a note outside a visit (phone call, results, etc.)' : '+ Add an admin note'}
+              </summary>
+              <div className="mt-3">
+                <NoteEditor patientId={patient.id} clinical={clinical} dictationEnabled={settings.dictation_enabled} defaultType="phone" />
+              </div>
+            </details>
+          </div>
+          <div className="space-y-6">
+            <div>
+              <h3 className="mb-2 font-label text-xs font-bold uppercase tracking-wider text-ink-soft">Visits</h3>
+              {encounters.length === 0 ? (
+                <p className="text-sm text-ink-soft">No visits yet.</p>
+              ) : (
+                <ul className="space-y-2 text-sm">
+                  {encounters.slice(0, 15).map((e) => (
+                    <li key={e.id} className="rounded-xl border border-line px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        {clinical ? (
+                          <Link href={`/dashboard/encounters/${e.id}`} className="font-semibold text-teal hover:underline">{formatClinicTime(e.arrived_at)}</Link>
+                        ) : <span className="font-semibold">{formatClinicTime(e.arrived_at)}</span>}
+                        {e.triage_category ? <TriageBadge category={e.triage_category} /> : null}
+                      </div>
+                      <p className="text-ink-soft">{e.presenting_complaint}</p>
+                      <p className="text-xs text-ink-soft">
+                        {ENCOUNTER_STATUS_LABELS[e.status]}
+                        {clinical && e.diagnosis ? ` · ${e.diagnosis}` : ''}
+                        {e.clinician_name ? ` · ${e.clinician_name}` : ''}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {clinical ? (
+              <div>
+                <h3 className="mb-2 font-label text-xs font-bold uppercase tracking-wider text-ink-soft">Prescriptions</h3>
+                {prescriptions.length === 0 ? (
+                  <p className="text-sm text-ink-soft">None issued.</p>
+                ) : (
+                  <ul className="space-y-2 text-sm">
+                    {prescriptions.map((r) => (
+                      <li key={r.id} className={`rounded-xl border border-line px-3 py-2 ${r.status === 'cancelled' ? 'opacity-60' : ''}`}>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold">{formatDate(r.issued_at ?? r.created_at)}</span>
+                          {r.status === 'cancelled' ? <Pill tone="red">Cancelled</Pill> : <Link href={`/print/prescription/${r.id}`} target="_blank" className="text-xs text-teal underline">Print with sheets</Link>}
+                        </div>
+                        <ul className="mt-1 text-ink-soft">
+                          {rxItems.filter((i) => i.prescription_id === r.id).map((i) => <li key={i.id}>{i.drug_name} {i.dose} {i.frequency}{i.duration ? ` · ${i.duration}` : ''}</li>)}
+                        </ul>
+                        <p className="text-xs text-ink-soft">{r.prescriber_name}</p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ) : null}
+          </div>
+        </div>
+      </section>
 
       {manage ? (
         <details className="card mt-6">

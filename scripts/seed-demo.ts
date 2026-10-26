@@ -15,12 +15,14 @@ async function main() {
 
     const q = (text: string, values: unknown[] = []) => p.query(text, values).then((r) => r.rows);
     const hash = await bcrypt.hash(DEMO_PASSWORD, 10);
-    for (const [email, name, role] of [
-      ['superadmin@demo.test', 'Sam Super', 'super_admin'],
-      ['admin@demo.test', 'Ari Admin', 'admin'],
-      ['nurse@demo.test', 'Nia Nurse', 'staff'],
+    // admin@demo.test has no clinical role, so it shows what reception can and can't see.
+    for (const [email, name, role, clinicalRole] of [
+      ['superadmin@demo.test', 'Sam Super', 'super_admin', 'doctor'],
+      ['admin@demo.test', 'Ari Admin', 'admin', null],
+      ['doctor@demo.test', 'Dana Doctor', 'staff', 'doctor'],
+      ['nurse@demo.test', 'Nia Nurse', 'staff', 'nurse'],
     ]) {
-      await q(`INSERT INTO users (email, name, password_hash, role, must_change_password) VALUES ($1, $2, $3, $4, false)`, [email, name, hash, role]);
+      await q(`INSERT INTO users (email, name, password_hash, role, clinical_role, must_change_password) VALUES ($1, $2, $3, $4, $5, false)`, [email, name, hash, role, clinicalRole]);
     }
     await q(`UPDATE clinic_settings SET bank_name = 'BCA', bank_account_name = 'PT Demo Klinik', bank_account_number = '000 000 0000',
       email = 'hello@demo.test', phone = '+62 000 0000 0000', budget_pin_hash = $1, opening_cash_balance = 50000000, opening_cash_date = date_trunc('month', CURRENT_DATE) - interval '2 months'`,
@@ -79,8 +81,13 @@ async function main() {
       await q(`INSERT INTO bank_transactions (statement_id, txn_date, description, counterparty, amount, direction) VALUES ($1, CURRENT_DATE - $2::int, $3, $4, $5, $6)`, [st.id, d, desc, cp || null, amt, dir]);
     }
 
+    await q(`UPDATE clinic_settings SET consultation_fee = 450000`);
+    await q(`INSERT INTO encounters (patient_id, encounter_type, presenting_complaint, created_by)
+      SELECT p.id, 'walk_in', 'Jellyfish sting on left leg while surfing, burning pain', u.id
+      FROM patients p, users u WHERE p.first_name = 'Robin' AND u.email = 'admin@demo.test'`);
+
     console.log(`Demo data created.
-  Staff login (/staff/login): superadmin@demo.test, admin@demo.test, nurse@demo.test
+  Staff login (/staff/login): superadmin@demo.test (doctor), doctor@demo.test, nurse@demo.test, admin@demo.test (reception, non-clinical)
   Patient login (/login): parent@demo.test
   Password for all demo accounts: ${DEMO_PASSWORD}
   Budget PIN: 2468`);

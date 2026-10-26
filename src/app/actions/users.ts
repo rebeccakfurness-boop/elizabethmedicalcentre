@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache';
 import type { FormState } from '@/app/actions/auth';
-import { can, type Role } from '@/lib/auth';
+import { can, CLINICAL_ROLE_LABELS, type ClinicalRole, type Role } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { errorMessage, num, str } from '@/lib/form';
 import { audit, requirePermission } from '@/lib/session';
@@ -27,6 +27,11 @@ export async function createStaffAccount(_prev: FormState, fd: FormData): Promis
   try {
     const { id, tempPassword } = await createUser({ email, name, role });
     await audit(user.id, 'create_staff', 'user', id, role);
+    const clinicalRole = str(fd, 'clinical_role') as ClinicalRole | null;
+    if (clinicalRole && can(user.role, 'manageAdminAccounts') && clinicalRole in CLINICAL_ROLE_LABELS) {
+      await sql`UPDATE users SET clinical_role = ${clinicalRole}, registration_number = ${str(fd, 'registration_number')} WHERE id = ${id}`;
+      await audit(user.id, 'set_clinical_role', 'user', id, clinicalRole);
+    }
     revalidatePath('/dashboard/staff');
     return { ok: `Account created. Temporary password: ${tempPassword} — share it privately; it won’t be shown again.` };
   } catch (err) {
@@ -67,4 +72,18 @@ export async function updateStaffAccount(_prev: FormState, fd: FormData): Promis
   await audit(user.id, 'update_staff', 'user', target.id, `${role} active=${active}`);
   revalidatePath('/dashboard/staff');
   return { ok: 'Saved.' };
+}
+
+/** Clinical roles unlock patient notes (and prescribing for doctors), so only super admins can grant them. */
+export async function setClinicalRole(_prev: FormState, fd: FormData): Promise<FormState> {
+  const user = await requirePermission('manageAdminAccounts');
+  const target = await loadTarget(fd);
+  if (!target || target.role === 'patient') return { error: 'Account not found.' };
+  const value = str(fd, 'clinical_role');
+  const clinicalRole = value && value in CLINICAL_ROLE_LABELS ? (value as ClinicalRole) : null;
+  if (value && !clinicalRole) return { error: 'Choose a clinical role.' };
+  await sql`UPDATE users SET clinical_role = ${clinicalRole}, registration_number = ${str(fd, 'registration_number')} WHERE id = ${target.id}`;
+  await audit(user.id, 'set_clinical_role', 'user', target.id, clinicalRole ?? 'none');
+  revalidatePath('/dashboard/staff');
+  return { ok: 'Clinical access saved.' };
 }

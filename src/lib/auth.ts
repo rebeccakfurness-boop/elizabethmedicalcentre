@@ -7,6 +7,25 @@ export const BUDGET_UNLOCK_TTL_MS = 1000 * 60 * 30; // PIN re-prompts after 30 m
 export type Role = 'patient' | 'staff' | 'admin' | 'super_admin';
 export const STAFF_ROLES: Role[] = ['staff', 'admin', 'super_admin'];
 
+/** Clinical role is independent of the admin role above. */
+export type ClinicalRole = 'doctor' | 'nurse' | 'midwife' | 'pharmacist';
+export const CLINICAL_ROLE_LABELS: Record<ClinicalRole, string> = {
+  doctor: 'Doctor',
+  nurse: 'Nurse',
+  midwife: 'Midwife',
+  pharmacist: 'Pharmacist',
+};
+
+/** Who may read clinical-only notes and vital signs: anyone with a clinical role. */
+export function isClinical(clinicalRole: ClinicalRole | null | undefined): boolean {
+  return !!clinicalRole;
+}
+
+/** Only doctors issue prescriptions and approve clinical content. */
+export function canPrescribe(clinicalRole: ClinicalRole | null | undefined): boolean {
+  return clinicalRole === 'doctor';
+}
+
 export const ROLE_LABELS: Record<Role, string> = {
   patient: 'Patient',
   staff: 'Staff',

@@ -43,3 +43,8 @@ export function parseAmount(input: FormDataEntryValue | string | null | undefine
 export function initials(first: string, last: string): string {
   return ((first?.[0] ?? '') + (last?.[0] ?? '')).toUpperCase();
 }
+
+/** Short date and time in clinic time (Lombok, WITA). */
+export function formatClinicTime(iso: string | Date | null | undefined): string {
+  return iso ? new Date(iso).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Makassar' }) : '—';
+}

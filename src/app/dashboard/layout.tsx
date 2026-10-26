@@ -1,6 +1,6 @@
 import { logout } from '@/app/actions/auth';
 import { Sidebar, type NavItem } from '@/components/dashboard/Sidebar';
-import { can, ROLE_LABELS } from '@/lib/auth';
+import { can, CLINICAL_ROLE_LABELS, isClinical, ROLE_LABELS } from '@/lib/auth';
 import { requireStaff } from '@/lib/session';
 
 export const metadata = { title: 'Dashboard – The Doctors', robots: { index: false } };
@@ -9,9 +9,16 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const user = await requireStaff();
   const items: NavItem[] = [
     { href: '/dashboard', label: 'Overview' },
+    { href: '/dashboard/clinic', label: 'Clinic today', section: 'Clinic' },
     { href: '/dashboard/patients', label: 'Patients', section: 'Patients' },
     { href: '/dashboard/families', label: 'Family accounts', section: 'Patients' },
   ];
+  if (isClinical(user.clinicalRole)) {
+    items.push(
+      { href: '/dashboard/protocols', label: 'Protocols', section: 'Clinic' },
+      { href: '/dashboard/formulary', label: 'Formulary & leaflets', section: 'Clinic' }
+    );
+  }
   if (can(user.role, 'finance')) {
     items.push(
       { href: '/dashboard/invoices', label: 'Invoices', section: 'Billing' },
@@ -32,7 +39,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   return (
     <div className="min-h-screen bg-paper lg:flex">
-      <Sidebar items={items} userName={user.name} roleLabel={ROLE_LABELS[user.role]} logoutAction={logout} />
+      <Sidebar items={items} userName={user.name} roleLabel={user.clinicalRole ? `${CLINICAL_ROLE_LABELS[user.clinicalRole]} · ${ROLE_LABELS[user.role]}` : ROLE_LABELS[user.role]} logoutAction={logout} />
       <main className="min-w-0 flex-1 px-4 py-6 sm:px-8 lg:py-10">{children}</main>
     </div>
   );

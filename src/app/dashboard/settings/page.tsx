@@ -34,6 +34,14 @@ export default async function SettingsPage() {
               <Field label="Tax rate (%)" name="tax_rate_percent" type="number" step="0.01" defaultValue={Number(s.tax_rate_percent)} hint="Medical services are usually VAT-exempt in Indonesia; check with your accountant." />
             </div>
             <TextArea label="Invoice footer" name="invoice_footer_note" defaultValue={s.invoice_footer_note} rows={2} />
+            <fieldset className="mt-4 grid gap-3 border-t border-line pt-4 sm:grid-cols-2">
+              <legend className="card-title mb-2">Clinic</legend>
+              <Field label="Standard consultation fee (Rp)" name="consultation_fee" type="number" defaultValue={Number(s.consultation_fee)} hint="Pre-filled when invoicing a completed visit." />
+              <label className="flex items-start gap-2 self-center text-sm">
+                <input type="checkbox" name="dictation_enabled" defaultChecked={s.dictation_enabled} className="mt-0.5 h-4 w-4 accent-teal" />
+                <span>Allow dictated notes. <span className="text-ink-soft">Uses the browser&rsquo;s speech recognition; in Chrome the audio is processed by Google.</span></span>
+              </label>
+            </fieldset>
           </ActionForm>
         </section>
         <section className="card h-fit" id="pin">

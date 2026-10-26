@@ -4,10 +4,11 @@ import { PatientFields } from '@/components/patients/PatientFields';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { Field } from '@/components/ui/Field';
 import { getFamily, getInsurers } from '@/lib/patients';
+import { isClinical } from '@/lib/auth';
 import { requirePermission } from '@/lib/session';
 
 export default async function NewPatientPage({ searchParams }: { searchParams: Promise<{ family?: string }> }) {
-  await requirePermission('managePatients');
+  const user = await requirePermission('managePatients');
   const { family } = await searchParams;
   const fam = family ? await getFamily(Number(family)) : null;
   const insurers = await getInsurers();
@@ -32,7 +33,7 @@ export default async function NewPatientPage({ searchParams }: { searchParams: P
               <Field label="Family account name" name="account_name" placeholder="Defaults to “[Last name] family”" className="max-w-sm" />
             </div>
           )}
-          <PatientFields insurers={insurers} includeMedical />
+          <PatientFields insurers={insurers} includeMedical clinical={isClinical(user.clinicalRole)} />
         </ActionForm>
       </div>
     </div>

@@ -292,9 +292,12 @@ export async function saveClinicSettings(_prev: FormState, fd: FormData): Promis
   const due = num(fd, 'invoice_due_days') ?? 14;
   const tax = num(fd, 'tax_rate_percent') ?? 0;
   if (tax < 0 || tax > 100) return { error: 'Tax rate must be between 0 and 100.' };
+  const fee = Math.max(0, Math.round(num(fd, 'consultation_fee') ?? 0));
+  const dictation = str(fd, 'dictation_enabled') === 'on';
   await sql`UPDATE clinic_settings SET legal_name = ${legal}, address = ${address}, email = ${str(fd, 'email')}, phone = ${str(fd, 'phone')},
     bank_name = ${str(fd, 'bank_name')}, bank_account_name = ${str(fd, 'bank_account_name')}, bank_account_number = ${str(fd, 'bank_account_number')},
-    bank_swift = ${str(fd, 'bank_swift')}, invoice_due_days = ${due}, tax_rate_percent = ${tax}, invoice_footer_note = ${str(fd, 'invoice_footer_note')}
+    bank_swift = ${str(fd, 'bank_swift')}, invoice_due_days = ${due}, tax_rate_percent = ${tax}, invoice_footer_note = ${str(fd, 'invoice_footer_note')},
+    consultation_fee = ${fee}, dictation_enabled = ${dictation}
     WHERE id = 1`;
   await audit(user.id, 'update', 'clinic_settings', 1);
   revalidatePath('/dashboard/settings');

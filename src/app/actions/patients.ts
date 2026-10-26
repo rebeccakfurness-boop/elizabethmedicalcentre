@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import type { FormState } from '@/app/actions/auth';
+import { isClinical } from '@/lib/auth';
 import { sql } from '@/lib/db';
 import { dateStr, errorMessage, num, str } from '@/lib/form';
 import { audit, requirePermission } from '@/lib/session';
@@ -32,6 +33,7 @@ function demographics(fd: FormData) {
 export async function createPatient(_prev: FormState, fd: FormData): Promise<FormState> {
   const user = await requirePermission('managePatients');
   const d = demographics(fd);
+  const clinical = isClinical(user.clinicalRole);
   if (!d.first_name || !d.last_name) return { error: 'First and last name are required.' };
   let familyId = num(fd, 'family_id');
   let newId: number;
@@ -50,7 +52,7 @@ export async function createPatient(_prev: FormState, fd: FormData): Promise<For
         insurer_id, insurance_policy_number, insurance_member_name, insurance_expiry)
       VALUES (${familyId}, ${isHolder}, ${d.relationship ?? (isHolder ? 'Account holder' : null)}, ${d.first_name}, ${d.last_name}, ${d.date_of_birth},
         ${d.sex}, ${d.nationality}, ${d.id_number}, ${d.phone}, ${d.email}, ${d.address}, ${d.emergency_contact_name}, ${d.emergency_contact_phone},
-        ${str(fd, 'blood_type')}, ${str(fd, 'allergies')}, ${str(fd, 'medical_notes')}, ${str(fd, 'current_medications')},
+        ${str(fd, 'blood_type')}, ${str(fd, 'allergies')}, ${clinical ? str(fd, 'medical_notes') : null}, ${clinical ? str(fd, 'current_medications') : null},
         ${d.insurer_id}, ${d.insurance_policy_number}, ${d.insurance_member_name}, ${d.insurance_expiry})
       RETURNING id`;
     newId = p.id;
@@ -80,8 +82,13 @@ export async function updateMedical(_prev: FormState, fd: FormData): Promise<For
   const user = await requirePermission('editMedical');
   const id = num(fd, 'id');
   if (!id) return { error: 'Missing patient.' };
-  await sql`UPDATE patients SET blood_type = ${str(fd, 'blood_type')}, allergies = ${str(fd, 'allergies')},
-    current_medications = ${str(fd, 'current_medications')}, medical_notes = ${str(fd, 'medical_notes')}, updated_at = now() WHERE id = ${id}`;
+  // Medications and medical notes are clinical-only; other staff may record allergies and blood type.
+  if (isClinical(user.clinicalRole)) {
+    await sql`UPDATE patients SET blood_type = ${str(fd, 'blood_type')}, allergies = ${str(fd, 'allergies')},
+      current_medications = ${str(fd, 'current_medications')}, medical_notes = ${str(fd, 'medical_notes')}, updated_at = now() WHERE id = ${id}`;
+  } else {
+    await sql`UPDATE patients SET blood_type = ${str(fd, 'blood_type')}, allergies = ${str(fd, 'allergies')}, updated_at = now() WHERE id = ${id}`;
+  }
   await audit(user.id, 'update_medical', 'patient', id);
   revalidatePath(`/dashboard/patients/${id}`);
   return { ok: 'Medical information saved.' };

@@ -124,6 +124,8 @@ export async function getClinicSettings() {
     budget_pin_hash: string | null;
     opening_cash_balance: number;
     opening_cash_date: string;
+    dictation_enabled: boolean;
+    consultation_fee: number;
   }>`SELECT * FROM clinic_settings WHERE id = 1`)[0];
 }
 

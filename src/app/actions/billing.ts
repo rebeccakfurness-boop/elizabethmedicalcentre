@@ -84,6 +84,12 @@ export async function saveInvoice(_prev: FormState, fd: FormData): Promise<FormS
     } else {
       invoiceId = await createInvoice(input, user.id, intent === 'issue');
       await audit(user.id, 'create', 'invoice', invoiceId);
+      const encounterId = num(fd, 'encounter_id');
+      if (encounterId) {
+        // Links the visit to its bill so it isn't invoiced twice.
+        await sql`UPDATE encounters e SET invoice_id = ${invoiceId} FROM patients p
+          WHERE e.id = ${encounterId} AND e.invoice_id IS NULL AND p.id = e.patient_id AND p.family_id = ${input.familyId}`;
+      }
     }
   } catch (err) {
     return { error: errorMessage(err) };

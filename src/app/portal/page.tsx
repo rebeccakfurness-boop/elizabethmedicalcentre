@@ -1,18 +1,23 @@
 import Link from 'next/link';
+import { FromYourDoctor } from '@/components/portal/FromYourDoctor';
 import { ClaimStatusBadge, InvoiceStatusBadge } from '@/components/ui/Badges';
 import { listClaims, listInvoices } from '@/lib/billing';
+import { getFamilyPrescriptions, getPatientPortalNotes, getPrescriptionItems } from '@/lib/clinical';
 import { ageFrom, formatDate, formatIDR, initials } from '@/lib/format';
 import { getFamily, getFamilyMembers } from '@/lib/patients';
 import { requirePatient } from '@/lib/session';
 
 export default async function PortalHome() {
   const user = await requirePatient();
-  const [family, members, invoicesAll, claims] = await Promise.all([
+  const [family, members, invoicesAll, claims, sharedNotes, prescriptions] = await Promise.all([
     getFamily(user.familyId),
     getFamilyMembers(user.familyId),
     listInvoices({ familyId: user.familyId }),
     listClaims({ familyId: user.familyId }),
+    getPatientPortalNotes(user.familyId),
+    getFamilyPrescriptions(user.familyId),
   ]);
+  const rxItems = await getPrescriptionItems(prescriptions.slice(0, 5).map((r) => r.id));
   const invoices = invoicesAll.filter((i) => i.status !== 'draft');
   const outstanding = invoices.filter((i) => (i.status === 'issued' || i.status === 'partially_paid') && i.patient_balance > 0);
   const balance = family?.balance ?? 0;
@@ -51,6 +56,8 @@ export default async function PortalHome() {
           ))}
         </div>
       </section>
+
+      <FromYourDoctor notes={sharedNotes.slice(0, 5)} prescriptions={prescriptions.slice(0, 5)} items={rxItems} showNames={members.length > 1} />
 
       <section className="card">
         <h2 className="card-title mb-3">Invoices</h2>

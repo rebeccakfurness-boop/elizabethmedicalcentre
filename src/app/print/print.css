@@ -1,0 +1,8 @@
+@media print {
+  @page { size: A4; margin: 14mm; }
+  body { background: white !important; }
+  .sheet { break-before: page; }
+  .sheet:first-of-type { break-before: auto; }
+}
+.sheet + .sheet { margin-top: 3rem; padding-top: 2rem; border-top: 1px dashed #e8ddd0; }
+@media print { .sheet + .sheet { margin-top: 0; padding-top: 0; border-top: 0; } }
