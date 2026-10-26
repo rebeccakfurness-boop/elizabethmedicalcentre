@@ -5,12 +5,17 @@ import { listClaims, listInvoices } from '@/lib/billing';
 import { getFamilyPrescriptions, getPatientPortalNotes, getPrescriptionItems } from '@/lib/clinical';
 import { getPortalLabResults } from '@/lib/labs';
 import { getPortalReferrals } from '@/lib/referrals';
+import { getFamilyAppointments, getBookingSettings } from '@/lib/appointments';
+import { formatClinicDateTime, KIND_LABELS } from '@/lib/booking-shared';
+import { ApptStatusBadge } from '@/components/booking/Badges';
 import { ageFrom, formatDate, formatIDR, initials } from '@/lib/format';
 import { getFamily, getFamilyMembers } from '@/lib/patients';
 import { requirePatient } from '@/lib/session';
 
 export default async function PortalHome() {
   const user = await requirePatient();
+  const [appointments, booking] = await Promise.all([getFamilyAppointments(user.familyId), getBookingSettings()]);
+  const upcoming = appointments.filter((a) => a.ends_at > new Date() && ['requested', 'confirmed'].includes(a.status)).reverse();
   const [family, members, invoicesAll, claims, sharedNotes, prescriptions, labs, referrals] = await Promise.all([
     getFamily(user.familyId),
     getFamilyMembers(user.familyId),
@@ -43,6 +48,31 @@ export default async function PortalHome() {
           </div>
         ) : (
           <p className="mt-2 text-sm">You&rsquo;re all paid up. Thank you!</p>
+        )}
+      </section>
+
+      <section className="card">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 className="card-title">Appointments</h2>
+          {booking.booking_enabled ? <Link href="/book" className="btn-clay btn-sm">Book an appointment</Link> : null}
+        </div>
+        {upcoming.length ? (
+          <ul className="divide-y divide-line">
+            {upcoming.map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-3 text-sm">
+                <span>
+                  <span className="font-semibold">{formatClinicDateTime(a.starts_at)}</span>
+                  <span className="block text-ink-soft">{a.patient_name ?? a.name} · {KIND_LABELS[a.kind]}</span>
+                </span>
+                <span className="flex items-center gap-2">
+                  <ApptStatusBadge status={a.status} />
+                  {a.manage_token ? <Link href={`/book/manage/${a.manage_token}`} className="btn-ghost btn-sm">Change or cancel</Link> : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-sm text-ink-soft">{booking.booking_enabled ? 'No upcoming appointments.' : 'Online booking opens soon. Call or WhatsApp us to book.'}</p>
         )}
       </section>
 

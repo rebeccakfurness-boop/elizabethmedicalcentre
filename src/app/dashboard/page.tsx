@@ -5,6 +5,7 @@ import { getFinanceSummary } from '@/lib/billing';
 import { sql } from '@/lib/db';
 import { formatIDR } from '@/lib/format';
 import { countLabsToReview } from '@/lib/labs';
+import { getExpectedToday, listPendingRequests } from '@/lib/appointments';
 import { requireStaff } from '@/lib/session';
 
 export default async function DashboardHome({ searchParams }: { searchParams: Promise<{ denied?: string }> }) {
@@ -17,6 +18,7 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
   `;
   const finance = can(user.role, 'finance') ? await getFinanceSummary() : null;
   const labs = isClinical(user.clinicalRole) ? await countLabsToReview() : null;
+  const [expected, requests] = await Promise.all([getExpectedToday(), listPendingRequests()]);
   const [clinic] = await sql<{ in_clinic: number; waiting: number; urgent: number; seen_today: number }>`
     SELECT COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged', 'in_consultation'))::int AS in_clinic,
            COUNT(*) FILTER (WHERE status IN ('waiting', 'triaged'))::int AS waiting,
@@ -40,6 +42,13 @@ export default async function DashboardHome({ searchParams }: { searchParams: Pr
         <StatTile label="Waiting to be seen" value={clinic.waiting} href="/dashboard/clinic" />
         <StatTile label="Very urgent or emergency waiting" value={clinic.urgent} tone={clinic.urgent ? 'alert' : 'good'} href="/dashboard/clinic" />
         <StatTile label="Seen today" value={clinic.seen_today} />
+        <StatTile
+          label="Still to arrive today"
+          value={expected.length}
+          note={requests.length ? `${requests.length} booking request${requests.length === 1 ? '' : 's'} to confirm` : undefined}
+          tone={requests.length ? 'alert' : 'default'}
+          href="/dashboard/appointments"
+        />
         {labs ? (
           <StatTile
             label="Results to review"

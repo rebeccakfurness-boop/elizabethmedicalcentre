@@ -48,6 +48,14 @@ Built for a walk-in clinic in Kuta, Lombok (`/dashboard/clinic`, `/dashboard/enc
 - **Billing link.** After a visit, **Create invoice for this visit** fills in the consultation fee (Clinic settings) and each medicine, and links the invoice to the visit.
 - **Clinical content approval.** Protocols, triage rules, drug sheets and leaflets are written as drafts based on WHO and common international guidance. Each one shows a "not yet approved" warning until a doctor reviews and approves it (Protocols / Formulary pages). Editing content in `src/clinical/*.ts` means bumping its `version`, which asks for approval again.
 
+## Appointments and online booking
+
+- **Online booking (`/book`).** Patients choose a doctor consultation at the clinic, a home / hotel / villa visit, a phone or video consultation, or **Urgent: coming in now**, then pick a free time (Lombok time) and enter their details. Portal users book for anyone in their family. The urgent option screens for emergency warning signs (chest pain, breathing difficulty, heavy bleeding…): ticking any shows "Call 119 now", and the clinic gets an URGENT email and sees them on the clinic board as on their way.
+- **Emails.** Confirmation with a calendar invite (.ics), a reminder the day before, and emails when an appointment is moved or cancelled. Each has a private link where the patient can change the time or cancel without logging in. Home visits are requests that staff confirm first. New bookings, moves and cancellations are also emailed to the clinic (Booking settings → "Email new bookings to").
+- **Reminders** go out every morning at 08:00 Lombok time through Vercel Cron (`vercel.json` → `/api/cron/reminders`). Set `CRON_SECRET` in Vercel so only Vercel can trigger it. Each booking is reminded once however often it runs, and staff can press **Send due reminders now** in the diary.
+- **Staff diary** (Dashboard → Appointments): day and week views, requests to confirm, phone bookings (any time, including double-booking), moving, cancelling, did-not-attend, clinician and video link, and a history of every change and email. A web booking is matched to an existing patient card by phone, email or name, or a new card is created from it. **Arrived / Start visit** puts the patient on the clinic board as a visit.
+- **Settings** (admins): online booking on/off (off until the clinic opens; when on, the website shows a "Book an appointment" button), opening hours per weekday, closed days, and for each appointment type the length, how many can be booked at once, minimum notice, automatic or manual confirmation, price note and its own hours.
+
 ## Operations
 
 For everyone on the team (Dashboard → Operations). Admins and super admins set things up; all staff use them.

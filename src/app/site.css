@@ -501,3 +501,23 @@
 }
 .site .footer__staff:hover,
 .site .footer__staff:focus-visible { opacity: 1; text-decoration: underline; }
+
+/* Online booking call to action (shown once booking is switched on). */
+.site .book-cta { display: flex; flex-wrap: wrap; align-items: center; gap: 0.75rem 1.25rem; margin: 1.5rem 0 1.75rem; }
+.site .book-cta__button {
+  display: inline-flex;
+  align-items: center;
+  padding: 1rem 1.75rem;
+  border-radius: 999px;
+  background: var(--cream);
+  color: var(--pulse-red);
+  font-family: var(--font-label);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  text-decoration: none;
+  transition: transform 0.2s ease, background-color 0.2s ease;
+}
+.site .book-cta__button:hover { background: #fff; transform: translateY(-1px); }
+.site .book-cta__button:focus-visible { outline: 3px solid var(--cream); outline-offset: 3px; }
+.site .book-cta__note { font-size: 0.9rem; opacity: 0.85; }

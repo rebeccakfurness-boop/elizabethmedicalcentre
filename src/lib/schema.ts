@@ -1,6 +1,6 @@
 /** Bump whenever SCHEMA_SQL changes, so already-initialised databases re-run it. Every statement
  * must stay idempotent (IF NOT EXISTS / ON CONFLICT DO NOTHING). */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 // Money is stored as BIGINT whole rupiah (IDR has no minor unit in practice).
 export const SCHEMA_SQL = `
@@ -694,6 +694,88 @@ CREATE TABLE IF NOT EXISTS project_card_activity (
   user_id INTEGER REFERENCES users(id),
   kind TEXT NOT NULL CHECK (kind IN ('comment', 'event')),
   body TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- ---------- Appointments (schema v5) ----------
+
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS booking_enabled BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS booking_hours JSONB;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS booking_notify_email TEXT;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS booking_max_days_ahead INTEGER NOT NULL DEFAULT 30;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS telehealth_video_link TEXT;
+ALTER TABLE clinic_settings ADD COLUMN IF NOT EXISTS reminders_enabled BOOLEAN NOT NULL DEFAULT true;
+
+-- What patients can book. kind decides the workflow; hours (7 entries, Sunday first) override the clinic hours.
+CREATE TABLE IF NOT EXISTS appointment_types (
+  id SERIAL PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL CHECK (kind IN ('clinic', 'home_visit', 'telehealth', 'walk_in')),
+  description TEXT,
+  duration_minutes INTEGER NOT NULL DEFAULT 20 CHECK (duration_minutes > 0),
+  capacity INTEGER NOT NULL DEFAULT 1 CHECK (capacity > 0),
+  min_notice_minutes INTEGER NOT NULL DEFAULT 60,
+  auto_confirm BOOLEAN NOT NULL DEFAULT true,
+  price_note TEXT,
+  hours JSONB,
+  is_active BOOLEAN NOT NULL DEFAULT true,
+  sort_order INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO appointment_types (code, name, kind, description, duration_minutes, capacity, min_notice_minutes, auto_confirm, sort_order) VALUES
+  ('consultation', 'Doctor consultation at the clinic', 'clinic', 'For illness, injuries, check-ups, travel health and prescriptions.', 20, 2, 60, true, 1),
+  ('home-visit', 'Home, hotel or villa visit', 'home_visit', 'A doctor comes to you in the Kuta and south Lombok area. We confirm the time by message.', 60, 1, 120, false, 2),
+  ('telehealth', 'Phone or video consultation', 'telehealth', 'Advice, follow-ups, results and repeat prescriptions without coming in.', 15, 1, 30, true, 3),
+  ('walk-in', 'Urgent: coming in now', 'walk_in', 'Let us know you are on the way so we can get ready.', 20, 99, 0, true, 4)
+ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS booking_closures (
+  id SERIAL PRIMARY KEY,
+  closed_date DATE NOT NULL UNIQUE,
+  reason TEXT
+);
+
+CREATE TABLE IF NOT EXISTS appointments (
+  id SERIAL PRIMARY KEY,
+  type_id INTEGER NOT NULL REFERENCES appointment_types(id),
+  patient_id INTEGER REFERENCES patients(id),
+  family_id INTEGER REFERENCES families(id),
+  starts_at TIMESTAMPTZ NOT NULL,
+  ends_at TIMESTAMPTZ NOT NULL,
+  status TEXT NOT NULL DEFAULT 'confirmed' CHECK (status IN ('requested', 'confirmed', 'checked_in', 'completed', 'cancelled', 'no_show')),
+  name TEXT NOT NULL,
+  email TEXT,
+  phone TEXT,
+  date_of_birth DATE,
+  reason TEXT,
+  address TEXT,
+  telehealth_mode TEXT CHECK (telehealth_mode IS NULL OR telehealth_mode IN ('phone', 'video')),
+  video_link TEXT,
+  red_flags TEXT[] NOT NULL DEFAULT '{}',
+  clinician_id INTEGER REFERENCES users(id),
+  encounter_id INTEGER REFERENCES encounters(id),
+  source TEXT NOT NULL DEFAULT 'web' CHECK (source IN ('web', 'portal', 'staff')),
+  manage_token TEXT UNIQUE,
+  reminders_wanted BOOLEAN NOT NULL DEFAULT true,
+  reminder_sent_at TIMESTAMPTZ,
+  ics_sequence INTEGER NOT NULL DEFAULT 0,
+  cancel_reason TEXT,
+  staff_notes TEXT,
+  client_ip TEXT,
+  created_by INTEGER REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS appointments_start_idx ON appointments (starts_at);
+CREATE INDEX IF NOT EXISTS appointments_patient_idx ON appointments (patient_id);
+
+-- Everything that happens to a booking, including each email sent.
+CREATE TABLE IF NOT EXISTS appointment_events (
+  id SERIAL PRIMARY KEY,
+  appointment_id INTEGER NOT NULL REFERENCES appointments(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id),
+  kind TEXT NOT NULL,
+  detail TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 `;

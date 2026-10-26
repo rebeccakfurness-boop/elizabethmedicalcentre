@@ -4,6 +4,9 @@ import { formatDate, formatIDR } from '@/lib/format';
 import { renderInvoicePdf, renderReferralPdf } from '@/lib/pdf/render';
 import { getReferral } from '@/lib/referrals';
 import { URGENCY_LABELS } from '@/clinical/referrals';
+import { getAppointment, getDueReminders, logAppointmentEvent, siteUrl, type Appointment } from '@/lib/appointments';
+import { buildIcs, formatClinicDateTime } from '@/lib/booking-shared';
+import { sql } from '@/lib/db';
 
 // Transactional email via Brevo's REST API (same provider as the Selong Bay system).
 // Needs BREVO_API_KEY and EMAIL_FROM (a sender address verified in Brevo).
@@ -12,7 +15,8 @@ async function send(input: { to: string; subject: string; html: string; attachme
   const apiKey = process.env.BREVO_API_KEY;
   const from = process.env.EMAIL_FROM;
   if (!apiKey || !from) throw new Error('Email isn’t set up yet (BREVO_API_KEY and EMAIL_FROM). Download the PDF and send it yourself for now.');
-  const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+  // BREVO_API_URL is only for pointing tests at a local mock.
+  const res = await fetch(process.env.BREVO_API_URL ?? 'https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': apiKey, 'content-type': 'application/json', accept: 'application/json' },
     body: JSON.stringify({
@@ -88,4 +92,146 @@ export async function sendReferralEmail(referralId: number, to: string, opts: { 
     attachment: { name: pdf.fileName, content: pdf.buffer.toString('base64') },
     replyTo: { email: r.author_email, name: r.author_name },
   });
+}
+
+// ---------- Appointments ----------
+
+export type AppointmentEmailKind = 'booked' | 'confirmed' | 'reminder' | 'rescheduled' | 'cancelled';
+
+function appointmentDetails(a: Appointment, clinic: { address: string; phone: string | null; telehealth_video_link: string | null }) {
+  const when = formatClinicDateTime(a.starts_at);
+  switch (a.kind) {
+    case 'clinic':
+      return {
+        where: `The Doctors – Elizabeth Medical Centre, ${clinic.address}`,
+        html: `<p><strong>${escape(when)}</strong> at the clinic.<br>${escape(clinic.address)}<br>
+          <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`The Doctors Elizabeth Medical Centre ${clinic.address}`)}">Open in Google Maps</a></p>
+          <p>Please bring your passport or ID, your travel insurance details, and any medicines you take.</p>`,
+      };
+    case 'home_visit':
+      return {
+        where: a.address ?? 'Home visit',
+        html: `<p><strong>${escape(when)}</strong>: a doctor will come to <strong>${escape(a.address ?? 'the address you gave')}</strong>.</p>
+          <p>We will message you on ${escape(a.phone ?? 'your phone')} when the doctor is on the way.</p>`,
+      };
+    case 'telehealth': {
+      const link = a.video_link ?? clinic.telehealth_video_link;
+      return {
+        where: a.telehealth_mode === 'video' && link ? link : 'Phone call',
+        html:
+          a.telehealth_mode === 'video'
+            ? `<p><strong>${escape(when)}</strong>: video consultation. ${link ? `Join here at the time of your appointment: <a href="${escape(link)}">${escape(link)}</a>` : 'We will send you the video link before the appointment.'}</p>`
+            : `<p><strong>${escape(when)}</strong>: the doctor will phone you on <strong>${escape(a.phone ?? 'the number you gave')}</strong>.</p>`,
+      };
+    }
+    default:
+      return {
+        where: clinic.address,
+        html: `<p>We are expecting you at the clinic: ${escape(clinic.address)}.</p>
+          <p><strong>If you get worse, call 119 (ambulance) or go to the nearest emergency department.</strong></p>`,
+      };
+  }
+}
+
+/** Patient emails for a booking. Returns false (and logs why) if it couldn't be sent. */
+export async function sendAppointmentEmail(appointmentId: number, kind: AppointmentEmailKind): Promise<boolean> {
+  const a = await getAppointment(appointmentId);
+  if (!a?.email) return false;
+  const clinic = await getClinicSettings();
+  const manage = a.manage_token ? `${await siteUrl()}/book/manage/${a.manage_token}` : null;
+  const d = appointmentDetails(a, clinic);
+  const pending = a.status === 'requested';
+  const subjects: Record<AppointmentEmailKind, string> = {
+    booked: pending ? `We’ve received your request: ${a.type_name}` : a.kind === 'walk_in' ? 'We’re expecting you' : `Booking confirmed: ${formatClinicDateTime(a.starts_at)}`,
+    confirmed: `Booking confirmed: ${formatClinicDateTime(a.starts_at)}`,
+    reminder: `Reminder: your appointment ${formatClinicDateTime(a.starts_at)}`,
+    rescheduled: `Appointment moved to ${formatClinicDateTime(a.starts_at)}`,
+    cancelled: 'Your appointment has been cancelled',
+  };
+  const intro: Record<AppointmentEmailKind, string> = {
+    booked: pending
+      ? `Thank you. We have received your request for a <strong>${escape(a.type_name.toLowerCase())}</strong>. We will confirm the time with you shortly.`
+      : `Your <strong>${escape(a.type_name.toLowerCase())}</strong> is booked.`,
+    confirmed: `Your <strong>${escape(a.type_name.toLowerCase())}</strong> is confirmed.`,
+    reminder: `This is a reminder of your <strong>${escape(a.type_name.toLowerCase())}</strong>.`,
+    rescheduled: `Your appointment has been moved.`,
+    cancelled: `Your appointment for ${escape(formatClinicDateTime(a.starts_at))} has been cancelled${a.cancel_reason ? ` (${escape(a.cancel_reason)})` : ''}. If you still need to see us, you can book again online or call us.`,
+  };
+  const body = `<p>Dear ${escape(a.name)},</p>
+    <p>${intro[kind]}</p>
+    ${kind === 'cancelled' ? '' : d.html}
+    ${manage && kind !== 'cancelled' && a.kind !== 'walk_in' ? `<p>Need to change it? <a href="${manage}">Reschedule or cancel your appointment</a>.</p>` : ''}
+    ${clinic.phone ? `<p>Questions? Call or WhatsApp ${escape(clinic.phone)}.</p>` : ''}
+    <p>In an emergency call 119.</p>
+    <p>Warm regards,<br>The Doctors – Elizabeth Medical Centre</p>`;
+  const withInvite = a.kind !== 'walk_in' && (kind === 'cancelled' || !pending);
+  const ics = withInvite
+    ? buildIcs({
+        uid: `appointment-${a.id}@elizabethmedicalcentre`,
+        sequence: a.ics_sequence,
+        start: a.starts_at,
+        end: a.ends_at,
+        summary: `${a.type_name} – The Doctors`,
+        description: `${a.type_name}${manage ? `\nChange or cancel: ${manage}` : ''}`,
+        location: d.where,
+        organizerEmail: clinic.email,
+        cancelled: kind === 'cancelled',
+      })
+    : null;
+  try {
+    await send({
+      to: a.email,
+      subject: subjects[kind],
+      html: body,
+      attachment: ics ? { name: 'appointment.ics', content: Buffer.from(ics).toString('base64') } : undefined,
+    });
+    await logAppointmentEvent(a.id, 'email', kind);
+    return true;
+  } catch (err) {
+    await logAppointmentEvent(a.id, 'email_failed', `${kind}: ${err instanceof Error ? err.message : 'unknown error'}`.slice(0, 300));
+    return false;
+  }
+}
+
+/** Tells the clinic about new online bookings (and urgent walk-ins). No clinical detail beyond the reason given. */
+export async function notifyClinicOfBooking(appointmentId: number, event: 'new' | 'rescheduled' | 'cancelled' = 'new'): Promise<void> {
+  const a = await getAppointment(appointmentId);
+  const clinic = await getClinicSettings();
+  const to = clinic.booking_notify_email ?? clinic.email;
+  if (!a || !to) return;
+  const link = `${await siteUrl()}/dashboard/appointments/${a.id}`;
+  const urgent = a.kind === 'walk_in' || a.red_flags.length > 0;
+  try {
+    await send({
+      to,
+      subject: `${urgent && event === 'new' ? 'URGENT – ' : ''}${event === 'cancelled' ? 'Cancelled' : event === 'rescheduled' ? 'Moved' : a.status === 'requested' ? 'Booking request' : 'New booking'}: ${a.type_name}, ${formatClinicDateTime(a.starts_at)}`,
+      html: `<p><strong>${escape(a.type_name)}</strong> – ${escape(formatClinicDateTime(a.starts_at))}</p>
+        <p>${escape(a.name)} · ${escape(a.phone ?? '')} · ${escape(a.email ?? '')}</p>
+        ${a.red_flags.length ? `<p><strong>Warning signs ticked:</strong> ${a.red_flags.map(escape).join(', ')}</p>` : ''}
+        ${a.status === 'requested' ? '<p>This needs confirming.</p>' : ''}
+        <p><a href="${link}">Open in the staff portal</a></p>`,
+    });
+    await logAppointmentEvent(a.id, 'email', `clinic notified (${event})`);
+  } catch (err) {
+    await logAppointmentEvent(a.id, 'email_failed', `clinic notification: ${err instanceof Error ? err.message : 'unknown error'}`.slice(0, 300));
+  }
+}
+
+/** Sends any reminders that are due. Safe to run repeatedly: each booking is reminded once. */
+export async function sendDueReminders(): Promise<{ sent: number; failed: number }> {
+  const clinic = await getClinicSettings();
+  if (!clinic.reminders_enabled) return { sent: 0, failed: 0 };
+  let sent = 0;
+  let failed = 0;
+  for (const id of await getDueReminders()) {
+    // Claim it first so two runs at once can't both send.
+    const claimed = await sql`UPDATE appointments SET reminder_sent_at = now() WHERE id = ${id} AND reminder_sent_at IS NULL RETURNING id`;
+    if (!claimed.length) continue;
+    if (await sendAppointmentEmail(id, 'reminder')) sent++;
+    else {
+      failed++;
+      await sql`UPDATE appointments SET reminder_sent_at = NULL WHERE id = ${id}`;
+    }
+  }
+  return { sent, failed };
 }

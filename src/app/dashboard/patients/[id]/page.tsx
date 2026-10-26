@@ -17,6 +17,9 @@ import { ENCOUNTER_STATUS_LABELS, getNotesForPatient, getPatientEncounters, getP
 import { query } from '@/lib/db';
 import { ageFrom, formatClinicTime, formatDate, formatIDR } from '@/lib/format';
 import { getLabResults, getPatientLabOrders } from '@/lib/labs';
+import { getPatientAppointments } from '@/lib/appointments';
+import { clinicParts, formatClinicDateTime, KIND_LABELS } from '@/lib/booking-shared';
+import { ApptStatusBadge } from '@/components/booking/Badges';
 import { getPatientReferrals } from '@/lib/referrals';
 import { getFamily, getFamilyMembers, getPatient } from '@/lib/patients';
 import { audit, requirePermission } from '@/lib/session';
@@ -51,6 +54,7 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
     clinical ? getPatientPrescriptions(patient.id) : Promise.resolve([]),
     getClinicSettings(),
   ]);
+  const appointments = await getPatientAppointments(patient.id);
   const [labOrders, referrals] = clinical ? await Promise.all([getPatientLabOrders(patient.id), getPatientReferrals(patient.id)]) : [[], []];
   const [rxItems, labResults] = await Promise.all([getPrescriptionItems(prescriptions.map((r) => r.id)), getLabResults(labOrders.slice(0, 10).map((o) => o.id))]);
   const openVisit = encounters.find((e) => ['waiting', 'triaged', 'in_consultation'].includes(e.status));
@@ -290,6 +294,26 @@ export default async function PatientCardPage({ params }: { params: Promise<{ id
             ) : null}
           </div>
         </div>
+      </section>
+
+      <section className="card mt-6" aria-labelledby="appointments">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h2 id="appointments" className="card-title">Appointments</h2>
+          <Link href={`/dashboard/appointments/new?q=${encodeURIComponent(patient.mrn)}&patient=${patient.id}`} className="btn-clay btn-sm">+ Book appointment</Link>
+        </div>
+        {appointments.length ? (
+          <ul className="divide-y divide-line text-sm">
+            {appointments.slice(0, 10).map((a) => (
+              <li key={a.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <Link href={`/dashboard/appointments/${a.id}`} className="text-teal hover:underline">
+                  {a.kind === 'walk_in' ? `Walk-in ${clinicParts(a.starts_at).date}` : formatClinicDateTime(a.starts_at)}
+                </Link>
+                <span className="text-ink-soft">{KIND_LABELS[a.kind]}{a.reason ? ` · ${a.reason}` : ''}</span>
+                <ApptStatusBadge status={a.status} />
+              </li>
+            ))}
+          </ul>
+        ) : <p className="text-sm text-ink-soft">No appointments.</p>}
       </section>
 
       {clinical ? (

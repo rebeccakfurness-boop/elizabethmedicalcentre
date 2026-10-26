@@ -126,6 +126,12 @@ export async function getClinicSettings() {
     opening_cash_date: string;
     dictation_enabled: boolean;
     consultation_fee: number;
+    booking_enabled: boolean;
+    booking_hours: import('@/lib/booking-shared').WeekHours | null;
+    booking_notify_email: string | null;
+    booking_max_days_ahead: number;
+    telehealth_video_link: string | null;
+    reminders_enabled: boolean;
   }>`SELECT * FROM clinic_settings WHERE id = 1`)[0];
 }
 

@@ -1,7 +1,21 @@
 import Link from 'next/link';
 import { Logo } from '@/components/Logo';
 import { NotifyForm } from '@/components/NotifyForm';
+import { sql } from '@/lib/db';
 import './site.css';
+
+// Re-checked every 5 minutes so the booking button appears soon after booking is switched on.
+export const revalidate = 300;
+
+async function bookingEnabled(): Promise<boolean> {
+  try {
+    const [row] = await sql<{ booking_enabled: boolean }>`SELECT booking_enabled FROM clinic_settings WHERE id = 1`;
+    return !!row?.booking_enabled;
+  } catch {
+    // The public site must never fail because the database is unavailable.
+    return false;
+  }
+}
 
 export const metadata = {
   title: 'The Doctors – Elizabeth Medical Centre | Coming soon to Kuta, Lombok',
@@ -12,7 +26,8 @@ export const metadata = {
   },
 };
 
-export default function HomePage() {
+export default async function HomePage() {
+  const booking = await bookingEnabled();
   return (
     <div className="site">
       <Link href="/login" className="patient-login">
@@ -44,6 +59,12 @@ export default function HomePage() {
                 and we&rsquo;ll let you know the moment our doors open.
               </p>
 
+              {booking ? (
+                <div className="book-cta">
+                  <Link href="/book" className="book-cta__button">Book an appointment</Link>
+                  <span className="book-cta__note">Clinic, home or hotel visits, phone and video</span>
+                </div>
+              ) : null}
               <NotifyForm />
             </div>
           </div>

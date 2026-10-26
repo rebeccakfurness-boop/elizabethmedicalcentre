@@ -10,6 +10,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const items: NavItem[] = [
     { href: '/dashboard', label: 'Overview' },
     { href: '/dashboard/clinic', label: 'Clinic today', section: 'Clinic' },
+    { href: '/dashboard/appointments', label: 'Appointments', section: 'Clinic' },
   ];
   if (isClinical(user.clinicalRole)) {
     items.push(

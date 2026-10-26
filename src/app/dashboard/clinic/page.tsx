@@ -1,11 +1,15 @@
 import Link from 'next/link';
+import { checkInAppointment } from '@/app/actions/appointments';
 import { checkInPatient, setEncounterStatus, startConsultation } from '@/app/actions/clinical';
+import { KIND_ICONS } from '@/components/booking/Badges';
 import { AutoRefresh } from '@/components/clinical/AutoRefresh';
 import { TriageBadge } from '@/components/clinical/Badges';
 import { EmptyState, PageHeader } from '@/components/dashboard/PageHeader';
 import { ActionForm } from '@/components/ui/ActionForm';
 import { Pill } from '@/components/ui/Badges';
 import { isClinical } from '@/lib/auth';
+import { getExpectedToday } from '@/lib/appointments';
+import { clinicParts } from '@/lib/booking-shared';
 import { ENCOUNTER_STATUS_LABELS, getQueue } from '@/lib/clinical';
 import { ageFrom } from '@/lib/format';
 import { searchPatients } from '@/lib/patients';
@@ -29,7 +33,7 @@ export default async function ClinicBoardPage({ searchParams }: { searchParams: 
   const user = await requirePermission('viewPatients');
   const clinical = isClinical(user.clinicalRole);
   const { q = '' } = await searchParams;
-  const [queue, results] = await Promise.all([getQueue(), q ? searchPatients(q) : Promise.resolve([])]);
+  const [queue, results, expected] = await Promise.all([getQueue(), q ? searchPatients(q) : Promise.resolve([]), getExpectedToday()]);
   const active = queue.filter((e) => ['waiting', 'triaged', 'in_consultation'].includes(e.status));
   const done = queue.filter((e) => !['waiting', 'triaged', 'in_consultation'].includes(e.status));
 
@@ -37,6 +41,33 @@ export default async function ClinicBoardPage({ searchParams }: { searchParams: 
     <div className="max-w-7xl">
       <AutoRefresh seconds={60} />
       <PageHeader eyebrow="Today" title="Clinic board" />
+
+      {expected.length ? (
+        <section className="card mb-6">
+          <h2 className="card-title mb-3">Booked for today ({expected.length})</h2>
+          <ul className="divide-y divide-line">
+            {expected.map((a) => (
+              <li key={a.id} className={`flex flex-wrap items-center gap-3 py-2 text-sm ${a.red_flags.length ? 'font-semibold text-red-800' : ''}`}>
+                <span className="w-14 font-bold">{a.kind === 'walk_in' ? '~' : ''}{clinicParts(a.starts_at).time}</span>
+                <span aria-hidden="true">{KIND_ICONS[a.kind]}</span>
+                <Link href={`/dashboard/appointments/${a.id}`} className="min-w-0 flex-1 text-teal hover:underline">
+                  {a.patient_name ?? a.name}<span className="text-ink-soft"> · {a.kind === 'walk_in' ? 'on their way' : a.type_name}{a.reason ? ` · ${a.reason}` : ''}</span>
+                  {a.red_flags.length ? <span className="ml-1">⚠ {a.red_flags[0]}</span> : null}
+                </Link>
+                {a.status === 'requested' ? <span className="pill bg-amber-100 text-amber-900">Needs confirming</span> : null}
+                {a.patient_id && a.status === 'confirmed' ? (
+                  <ActionForm action={checkInAppointment} submitLabel={a.kind === 'clinic' || a.kind === 'walk_in' ? 'Arrived' : 'Start visit'} submitClassName="btn-clay btn-sm" inline>
+                    <input type="hidden" name="appointment_id" value={a.id} />
+                    {clinical ? <input type="hidden" name="then" value="open" /> : null}
+                  </ActionForm>
+                ) : !a.patient_id ? (
+                  <Link href={`/dashboard/appointments/${a.id}`} className="btn-ghost btn-sm">Link patient card</Link>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
 
       <section className="card mb-6">
         <h2 className="card-title mb-3">Check a patient in</h2>
