@@ -74,6 +74,8 @@ npm run db:create-user -- you@clinic.com "Your Name" super_admin   # prints a on
 npm run dev
 ```
 
+On a fresh deployment where you can't run scripts, set a `SETUP_TOKEN` environment variable instead and open `/setup`: it creates the first super admin and closes for good once any staff account exists.
+
 Then sign in at `/staff/login`, set the budget PIN and bank details in **Clinic settings**, and add your insurers under **Insurance claims**.
 
 To try every screen locally with made-up data, run `npm run db:seed-demo` against an **empty, local** database. It refuses to run if any patients exist. Demo logins are printed at the end.
